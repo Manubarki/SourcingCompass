@@ -71,13 +71,12 @@ const STAGE_STYLES = {
   "Seed":      "bg-rose-900/60 text-rose-300 border-rose-700",
 };
 
-function ConfidenceBar({ value }) {
-  const color = value >= 80 ? "#34d399" : value >= 60 ? "#facc15" : "#f87171";
+function ScoreBar({ label, value, color }) {
   return (
-    <div className="mt-2">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-[9px] text-slate-500 tracking-widest uppercase">Match confidence</span>
-        <span className="text-[10px] font-bold font-mono" style={{ color }}>{value}%</span>
+    <div className="mt-1.5">
+      <div className="flex justify-between items-center mb-0.5">
+        <span className="text-[9px] text-slate-500 tracking-widest uppercase">{label}</span>
+        <span className="text-[10px] font-bold font-mono" style={{ color }}>{value}</span>
       </div>
       <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all duration-700" style={{ width:`${value}%`, background:color, boxShadow:`0 0 6px ${color}88` }}/>
@@ -86,9 +85,37 @@ function ConfidenceBar({ value }) {
   );
 }
 
+function CompanyScores({ node }) {
+  return (
+    <div className="mt-2 space-y-0.5">
+      {node.talentDensity != null && <ScoreBar label="Talent Density" value={node.talentDensity} color="#38bdf8"/>}
+      {node.confidence != null && <ScoreBar label="Relevance" value={node.confidence} color="#34d399"/>}
+      {node.poachability != null && <ScoreBar label="Poachability" value={node.poachability} color="#facc15"/>}
+      {node.likelyProfile && (
+        <div className="mt-2 pt-2 border-t border-slate-700/50">
+          <div className="text-[9px] text-slate-500 tracking-widest uppercase mb-1">Likely Talent Profile</div>
+          <div className="text-[10px] text-slate-400 leading-relaxed">{node.likelyProfile}</div>
+        </div>
+      )}
+      {node.poachabilitySignals?.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-yellow-900/40">
+          <div className="text-[9px] text-yellow-600 tracking-widest uppercase mb-1">Poachability Signals</div>
+          {node.poachabilitySignals.map((s, i) => (
+            <div key={i} className="flex gap-1.5 mt-1">
+              <span className="text-yellow-600 text-[9px] mt-0.5 flex-shrink-0">•</span>
+              <span className="text-[10px] text-slate-400 leading-relaxed">{s}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NodeCard({ node, category, onHover, isActive }) {
   const s = CATEGORY_STYLES[category];
-  const showConfidence = (category==="companies"||category==="titles") && node.confidence!=null;
+  const showConfidence = (category==="titles") && node.confidence!=null;
+  const showCompanyScores = category==="companies";
   return (
     <div id={`node-${node.id}`} onMouseEnter={()=>onHover(node)} onMouseLeave={()=>onHover(null)}
       className={`relative rounded border ${s.bg} ${s.border} p-3 cursor-pointer transition-all duration-200 select-none ${isActive?"shadow-lg scale-105 z-20":"hover:shadow-md"}`}
@@ -99,7 +126,12 @@ function NodeCard({ node, category, onHover, isActive }) {
       </div>
       {node.sub && <div className="text-xs text-slate-400">{node.sub}</div>}
       {node.tags && <div className="flex flex-wrap gap-1 mt-2">{node.tags.map(t=><span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${s.badge}`}>{t}</span>)}</div>}
-      {showConfidence && <ConfidenceBar value={node.confidence}/>}
+      {showCompanyScores && <CompanyScores node={node}/>}
+      {showConfidence && (
+        <div className="mt-2">
+          <ScoreBar label="Match Confidence" value={node.confidence} color={node.confidence>=80?"#34d399":node.confidence>=60?"#facc15":"#f87171"}/>
+        </div>
+      )}
       {node.connections?.length>0 && <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-500 font-mono">{node.connections.length} links</div>}
     </div>
   );
@@ -139,7 +171,11 @@ Return this exact JSON:
   "titles":    [{ "id":"t1","label":"Title","sub":"Common at","tags":["v1"],"connections":[],"confidence":90 }]
 }
 
-Rules: 6-8 companies (mix incl 3-4 startups), 4-5 adjacent pools, 3-4 wildcards, 5-7 titles. confidence=0-100. stage= Public/Late Stage/Series C+/Series B/Series A/Seed/Enterprise. Return ONLY valid JSON.`;
+Rules:
+- 6-8 companies (mix incl 3-4 startups), 4-5 adjacent pools, 3-4 wildcards, 5-7 titles
+- NEVER include "${form.company}" in the target companies — it's the hiring company, not a target
+- confidence=0-100. stage= Public/Late Stage/Series C+/Series B/Series A/Seed/Enterprise
+- Return ONLY valid JSON.`;
 }
 
 const EMPTY = { companies:[], adjacent:[], wildcards:[], titles:[] };
