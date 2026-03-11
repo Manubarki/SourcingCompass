@@ -320,7 +320,7 @@ export default function TalentMap() {
             <Section title="Target Companies" category="companies" nodes={mapData.companies} onHover={setActiveNode} activeNode={activeNode}/>
             <Section title="Adjacent Talent Pools" category="adjacent" nodes={mapData.adjacent} onHover={setActiveNode} activeNode={activeNode}/>
             <Section title="Wildcard Bets" category="wildcards" nodes={mapData.wildcards} onHover={setActiveNode} activeNode={activeNode}/>
-            <Section title="Target Titles" category="titles" nodes={mapData.tiles} onHover={setActiveNode} activeNode={activeNode}/>
+            <Section title="Target Titles" category="titles" nodes={mapData.titles} onHover={setActiveNode} activeNode={activeNode}/>
           </div>
         )}
       </div>
