@@ -180,7 +180,7 @@ Return this exact JSON structure:
     "likelyProfile": "One sentence describing the typical engineer background here.",
     "poachabilitySignals": ["[Signal] First reason they might move", "[Confirmed] Second reason"]
   }],
-  "adjacent": [{ "id": "a1", "label": "Pool Name", "sub": "Why relevant", "tags": ["tag1"], "connections": ["c1"] }],
+  "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["skill1"], "connections": ["c1"] }],
   "wildcards": [{ "id": "w1", "label": "Wildcard", "sub": "Unconventional angle", "tags": ["tag1"], "connections": ["c1", "a1"] }],
   "titles": [{ "id": "t1", "label": "Job Title", "sub": "Common at these orgs", "tags": ["variant"], "connections": [], "confidence": 90 }]
 }
@@ -194,7 +194,7 @@ Rules:
 - poachabilitySignals = exactly 2-3 bullet strings prefixed with [Signal] or [Confirmed]
 - likelyProfile = 1 sentence max
 - stage = one of: Public / Late Stage / Series C+ / Series B / Series A / Seed / Enterprise
-- 4-5 adjacent pools, 3-4 wildcards, 5-7 titles
+- 4-5 adjacent pools = specific COMPANIES (not job titles) whose engineers have transferable skills relevant to this role — e.g. "Databricks", "dbt Labs", "Fivetran"
 - Return ONLY raw valid JSON. No markdown. No explanation.`;
 }
 
