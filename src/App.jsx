@@ -71,7 +71,37 @@ const STAGE_STYLES = {
   "Seed":      "bg-rose-900/60 text-rose-300 border-rose-700",
 };
 
-function ScoreBar({ label, value, color }) {
+function TagInput({ placeholder, tags, onChange }) {
+  const [input, setInput] = useState("");
+  function handleKey(e) {
+    if ((e.key === "," || e.key === "Enter") && input.trim()) {
+      e.preventDefault();
+      onChange([...tags, input.trim().replace(/,$/, "")]);
+      setInput("");
+    } else if (e.key === "Backspace" && !input && tags.length) {
+      onChange(tags.slice(0, -1));
+    }
+  }
+  function removeTag(i) { onChange(tags.filter((_, idx) => idx !== i)); }
+  return (
+    <div className="w-full min-h-[38px] bg-slate-800 border border-slate-600 rounded px-2 py-1.5 flex flex-wrap gap-1 focus-within:border-sky-500 transition-colors cursor-text"
+      onClick={e => e.currentTarget.querySelector("input").focus()}>
+      {tags.map((t, i) => (
+        <span key={i} className="flex items-center gap-1 bg-sky-900/60 border border-sky-700 text-sky-300 text-[10px] px-1.5 py-0.5 rounded font-mono">
+          {t}
+          <button onClick={() => removeTag(i)} className="text-sky-500 hover:text-sky-200 leading-none">×</button>
+        </span>
+      ))}
+      <input
+        className="bg-transparent text-xs text-slate-200 placeholder-slate-600 outline-none flex-1 min-w-[80px]"
+        placeholder={tags.length ? "" : placeholder}
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKey}
+      />
+    </div>
+  );
+}
   return (
     <div className="mt-1.5">
       <div className="flex justify-between items-center mb-0.5">
@@ -163,7 +193,9 @@ Role: ${form.role}
 Company: ${form.company}
 Location: ${form.location}
 Seniority: ${form.seniority}
-Skills: ${form.skills}
+Skills: ${form.skills.join(", ")}
+Industries: ${form.industries.join(", ") || "Any"}
+Exclusions (do NOT include these companies or industries): ${form.exclusions.join(", ") || "None"}
 
 Return this exact JSON structure:
 {
@@ -201,7 +233,10 @@ Rules:
 const EMPTY = { companies:[], adjacent:[], wildcards:[], titles:[] };
 
 export default function TalentMap() {
-  const [form, setForm] = useState({ role:"", company:"", location:"", seniority:"Senior", skills:"" });
+  const [form, setForm] = useState({
+    role:"", company:"", location:"", seniority:"",
+    skills:[], industries:[], exclusions:[]
+  });
   const [mapData, setMapData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [activeNode, setActiveNode] = useState(null);
@@ -249,28 +284,44 @@ export default function TalentMap() {
           <div className="text-[10px] text-slate-500 tracking-wider">Blueprint Intelligence System v2.1</div>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {[
-            {label:"Target Role", key:"role", placeholder:"e.g. Staff ML Engineer"},
-            {label:"Your Company", key:"company", placeholder:"e.g. Atlan"},
-            {label:"Location", key:"location", placeholder:"e.g. North America / Remote"},
-          ].map(f => (
-            <div key={f.key}>
-              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">{f.label}</label>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Role Title</label>
               <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
-                placeholder={f.placeholder} value={form[f.key]} onChange={e=>set(f.key, e.target.value)}/>
+                placeholder="e.g. Staff Engineer" value={form.role} onChange={e=>set("role", e.target.value)}/>
             </div>
-          ))}
-          <div>
-            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Seniority</label>
-            <select className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-              value={form.seniority} onChange={e=>set("seniority", e.target.value)}>
-              {["Junior","Mid","Senior","Staff","Principal","Director","VP"].map(s=><option key={s}>{s}</option>)}
-            </select>
+            <div className="flex-1">
+              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Hiring Company</label>
+              <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
+                placeholder="e.g. Atlan" value={form.company} onChange={e=>set("company", e.target.value)}/>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Location</label>
+              <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
+                placeholder="e.g. North America" value={form.location} onChange={e=>set("location", e.target.value)}/>
+            </div>
+            <div className="flex-1">
+              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Seniority</label>
+              <select className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                value={form.seniority} onChange={e=>set("seniority", e.target.value)}>
+                <option value="">Select level</option>
+                {["Junior","Mid","Senior","Staff","Principal","Director","VP"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
           </div>
           <div>
-            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Key Skills</label>
-            <textarea rows={3} className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none"
-              placeholder="e.g. Apache Iceberg, data lakehouse..." value={form.skills} onChange={e=>set("skills", e.target.value)}/>
+            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Must-Have Skills</label>
+            <TagInput placeholder="Type a skill and press , or Enter" tags={form.skills} onChange={v=>set("skills", v)}/>
+          </div>
+          <div>
+            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Preferred Industries</label>
+            <TagInput placeholder="e.g. Fintech, Data → press , or Enter" tags={form.industries} onChange={v=>set("industries", v)}/>
+          </div>
+          <div>
+            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Exclusions</label>
+            <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v=>set("exclusions", v)}/>
           </div>
           {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
           <button onClick={generate} disabled={loading}
