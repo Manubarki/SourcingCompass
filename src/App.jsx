@@ -114,8 +114,6 @@ function CompanyScores({ node }) {
 
 function NodeCard({ node, category, onHover, isActive }) {
   const s = CATEGORY_STYLES[category];
-  const showConfidence = (category==="titles") && node.confidence!=null;
-  const showCompanyScores = category==="companies";
   return (
     <div id={`node-${node.id}`} onMouseEnter={()=>onHover(node)} onMouseLeave={()=>onHover(null)}
       className={`relative rounded border ${s.bg} ${s.border} p-3 cursor-pointer transition-all duration-200 select-none ${isActive?"shadow-lg scale-105 z-20":"hover:shadow-md"}`}
@@ -125,14 +123,18 @@ function NodeCard({ node, category, onHover, isActive }) {
         {node.stage && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono whitespace-nowrap flex-shrink-0 ${STAGE_STYLES[node.stage]||"bg-slate-800 text-slate-400 border-slate-600"}`}>{node.stage}</span>}
       </div>
       {node.sub && <div className="text-xs text-slate-400">{node.sub}</div>}
-      {node.tags && <div className="flex flex-wrap gap-1 mt-2">{node.tags.map(t=><span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${s.badge}`}>{t}</span>)}</div>}
-      {showCompanyScores && <CompanyScores node={node}/>}
-      {showConfidence && (
-        <div className="mt-2">
-          <ScoreBar label="Match Confidence" value={node.confidence} color={node.confidence>=80?"#34d399":node.confidence>=60?"#facc15":"#f87171"}/>
+      {node.tags && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {node.tags.map(t=><span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${s.badge}`}>{t}</span>)}
         </div>
       )}
-      {node.connections?.length>0 && <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-500 font-mono">{node.connections.length} links</div>}
+      {category === "companies" && <CompanyScores node={node}/>}
+      {category === "titles" && node.confidence != null && (
+        <ScoreBar label="Match Confidence" value={node.confidence} color={node.confidence>=80?"#34d399":node.confidence>=60?"#facc15":"#f87171"}/>
+      )}
+      {node.connections?.length > 0 && (
+        <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-500 font-mono">{node.connections.length} links</div>
+      )}
     </div>
   );
 }
@@ -155,7 +157,7 @@ function Section({ title, category, nodes, onHover, activeNode }) {
 }
 
 function buildPrompt(form) {
-  return `You are a talent intelligence system. Return a structured talent map as JSON only — no markdown, no explanation.
+  return `You are a talent intelligence system. Return a structured talent map as JSON only — no markdown, no explanation, no backticks.
 
 Role: ${form.role}
 Company: ${form.company}
@@ -163,19 +165,37 @@ Location: ${form.location}
 Seniority: ${form.seniority}
 Skills: ${form.skills}
 
-Return this exact JSON:
+Return this exact JSON structure:
 {
-  "companies": [{ "id":"c1","label":"Name","sub":"Industry · Size","tags":["t1"],"connections":["w1"],"confidence":85,"stage":"Series B" }],
-  "adjacent":  [{ "id":"a1","label":"Pool","sub":"Why relevant","tags":["t1"],"connections":["c1"] }],
-  "wildcards": [{ "id":"w1","label":"Wildcard","sub":"Angle","tags":["t1"],"connections":["c1","a1"] }],
-  "titles":    [{ "id":"t1","label":"Title","sub":"Common at","tags":["v1"],"connections":[],"confidence":90 }]
+  "companies": [{
+    "id": "c1",
+    "label": "Company Name",
+    "sub": "Industry · Size",
+    "tags": ["tag1", "tag2"],
+    "connections": ["w1"],
+    "confidence": 85,
+    "stage": "Series B",
+    "talentDensity": 78,
+    "poachability": 65,
+    "likelyProfile": "One sentence describing the typical engineer background here.",
+    "poachabilitySignals": ["[Signal] First reason they might move", "[Confirmed] Second reason"]
+  }],
+  "adjacent": [{ "id": "a1", "label": "Pool Name", "sub": "Why relevant", "tags": ["tag1"], "connections": ["c1"] }],
+  "wildcards": [{ "id": "w1", "label": "Wildcard", "sub": "Unconventional angle", "tags": ["tag1"], "connections": ["c1", "a1"] }],
+  "titles": [{ "id": "t1", "label": "Job Title", "sub": "Common at these orgs", "tags": ["variant"], "connections": [], "confidence": 90 }]
 }
 
 Rules:
-- 6-8 companies (mix incl 3-4 startups), 4-5 adjacent pools, 3-4 wildcards, 5-7 titles
-- NEVER include "${form.company}" in the target companies — it's the hiring company, not a target
-- confidence=0-100. stage= Public/Late Stage/Series C+/Series B/Series A/Seed/Enterprise
-- Return ONLY valid JSON.`;
+- 6-8 companies (mix of established AND 3-4 notable startups)
+- NEVER include "${form.company}" in target companies
+- confidence = relevance score 0-100
+- talentDensity = concentration of relevant engineers 0-100
+- poachability = likelihood to move 0-100 (higher if layoffs, slow growth, underpaid)
+- poachabilitySignals = exactly 2-3 bullet strings prefixed with [Signal] or [Confirmed]
+- likelyProfile = 1 sentence max
+- stage = one of: Public / Late Stage / Series C+ / Series B / Series A / Seed / Enterprise
+- 4-5 adjacent pools, 3-4 wildcards, 5-7 titles
+- Return ONLY raw valid JSON. No markdown. No explanation.`;
 }
 
 const EMPTY = { companies:[], adjacent:[], wildcards:[], titles:[] };
@@ -195,23 +215,28 @@ export default function TalentMap() {
     setError(""); setLoading(true); setMapData(null);
     try {
       const res = await fetch("/api/generate", {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-        },
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:4000, messages:[{role:"user",content:buildPrompt(form)}] })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 3000,
+          messages: [{ role: "user", content: buildPrompt(form) }]
+        })
       });
       const data = await res.json();
-      if (!res.ok) { setError(`API error ${res.status}: ${data?.error?.message||JSON.stringify(data)}`); setLoading(false); return; }
-      const raw = data.content?.map(b=>b.text||"").join("").trim();
-      const clean = raw.replace(/```json|```/g,"").trim();
+      if (!res.ok) { setError(`API error ${res.status}: ${JSON.stringify(data)}`); setLoading(false); return; }
+      const raw = data.content?.map(b => b.text || "").join("").trim();
+      const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
-      setMapData({...EMPTY,...parsed}); setGenerated(true);
-    } catch(e) { setError(`Error: ${e.message}`); }
+      setMapData({ ...EMPTY, ...parsed });
+      setGenerated(true);
+    } catch(e) {
+      setError(`Error: ${e.message}`);
+    }
     setLoading(false);
   }
 
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   return (
     <div className="flex h-screen bg-slate-950 font-mono overflow-hidden">
@@ -225,33 +250,33 @@ export default function TalentMap() {
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {[
-            {label:"Target Role",key:"role",placeholder:"e.g. Staff ML Engineer"},
-            {label:"Your Company",key:"company",placeholder:"e.g. Stripe"},
-            {label:"Location",key:"location",placeholder:"e.g. San Francisco / Remote"},
-          ].map(f=>(
+            {label:"Target Role", key:"role", placeholder:"e.g. Staff ML Engineer"},
+            {label:"Your Company", key:"company", placeholder:"e.g. Atlan"},
+            {label:"Location", key:"location", placeholder:"e.g. North America / Remote"},
+          ].map(f => (
             <div key={f.key}>
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">{f.label}</label>
               <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
-                placeholder={f.placeholder} value={form[f.key]} onChange={e=>set(f.key,e.target.value)}/>
+                placeholder={f.placeholder} value={form[f.key]} onChange={e=>set(f.key, e.target.value)}/>
             </div>
           ))}
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Seniority</label>
             <select className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-              value={form.seniority} onChange={e=>set("seniority",e.target.value)}>
+              value={form.seniority} onChange={e=>set("seniority", e.target.value)}>
               {["Junior","Mid","Senior","Staff","Principal","Director","VP"].map(s=><option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Key Skills</label>
             <textarea rows={3} className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none"
-              placeholder="e.g. PyTorch, distributed systems..." value={form.skills} onChange={e=>set("skills",e.target.value)}/>
+              placeholder="e.g. Apache Iceberg, data lakehouse..." value={form.skills} onChange={e=>set("skills", e.target.value)}/>
           </div>
           {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
           <button onClick={generate} disabled={loading}
             className="w-full py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
             style={{boxShadow:loading?"none":"0 0 12px #38bdf855"}}>
-            {loading?"Generating...":"Generate Map"}
+            {loading ? "Generating..." : "Generate Map"}
           </button>
         </div>
         <div className="px-5 py-4 border-t border-slate-700/50 space-y-2">
@@ -268,33 +293,34 @@ export default function TalentMap() {
           </div>
         </div>
       </div>
+
       <div className="flex-1 relative overflow-y-auto" ref={mapRef}>
         <BlueprintGrid/>
         <LaserLines nodes={allNodes} activeNode={activeNode} containerRef={mapRef}/>
-        {!generated&&!loading&&(
+        {!generated && !loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
             <div className="text-slate-700 text-4xl mb-4">⊕</div>
             <div className="text-slate-500 text-xs tracking-widest uppercase">Configure inputs and hit Generate Map</div>
             <div className="text-slate-700 text-[10px] mt-2">AI-powered talent intelligence will populate here</div>
           </div>
         )}
-        {loading&&(
+        {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
             <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin"/>
             <div className="text-sky-400 text-xs tracking-widest uppercase animate-pulse">Mapping talent landscape...</div>
           </div>
         )}
-        {mapData&&!loading&&(
+        {mapData && !loading && (
           <div className="relative z-10 p-8">
             <div className="mb-8 pb-4 border-b border-slate-700/50">
               <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
-              <div className="text-slate-500 text-xs mt-1">{[form.company,form.location].filter(Boolean).join(" · ")}</div>
+              <div className="text-slate-500 text-xs mt-1">{[form.company, form.location].filter(Boolean).join(" · ")}</div>
               <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover to reveal connections</div>
             </div>
             <Section title="Target Companies" category="companies" nodes={mapData.companies} onHover={setActiveNode} activeNode={activeNode}/>
             <Section title="Adjacent Talent Pools" category="adjacent" nodes={mapData.adjacent} onHover={setActiveNode} activeNode={activeNode}/>
             <Section title="Wildcard Bets" category="wildcards" nodes={mapData.wildcards} onHover={setActiveNode} activeNode={activeNode}/>
-            <Section title="Target Titles" category="titles" nodes={mapData.titles} onHover={setActiveNode} activeNode={activeNode}/>
+            <Section title="Target Titles" category="titles" nodes={mapData.tiles} onHover={setActiveNode} activeNode={activeNode}/>
           </div>
         )}
       </div>
