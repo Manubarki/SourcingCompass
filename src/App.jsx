@@ -84,8 +84,10 @@ function TagInput({ placeholder, tags, onChange }) {
   }
   function removeTag(i) { onChange(tags.filter((_, idx) => idx !== i)); }
   return (
-    <div className="w-full min-h-[38px] bg-slate-800 border border-slate-600 rounded px-2 py-1.5 flex flex-wrap gap-1 focus-within:border-sky-500 transition-colors cursor-text"
-      onClick={e => e.currentTarget.querySelector("input").focus()}>
+    <div
+      className="w-full min-h-[38px] bg-slate-800 border border-slate-600 rounded px-2 py-1.5 flex flex-wrap gap-1 focus-within:border-sky-500 transition-colors cursor-text"
+      onClick={e => e.currentTarget.querySelector("input").focus()}
+    >
       {tags.map((t, i) => (
         <span key={i} className="flex items-center gap-1 bg-sky-900/60 border border-sky-700 text-sky-300 text-[10px] px-1.5 py-0.5 rounded font-mono">
           {t}
@@ -102,6 +104,8 @@ function TagInput({ placeholder, tags, onChange }) {
     </div>
   );
 }
+
+function ScoreBar({ label, value, color }) {
   return (
     <div className="mt-1.5">
       <div className="flex justify-between items-center mb-0.5">
@@ -129,7 +133,7 @@ function CompanyScores({ node }) {
       )}
       {node.poachabilitySignals?.length > 0 && (
         <div className="mt-2 pt-2 border-t border-yellow-900/40">
-          <div className="text-[9px] text-yellow-600 tracking-widest uppercase mb-1">Poachability Signals</div>
+          <div className="text-[9px] text-yellow-600 tracking-widests uppercase mb-1">Poachability Signals</div>
           {node.poachabilitySignals.map((s, i) => (
             <div key={i} className="flex gap-1.5 mt-1">
               <span className="text-yellow-600 text-[9px] mt-0.5 flex-shrink-0">•</span>
@@ -145,22 +149,34 @@ function CompanyScores({ node }) {
 function NodeCard({ node, category, onHover, isActive }) {
   const s = CATEGORY_STYLES[category];
   return (
-    <div id={`node-${node.id}`} onMouseEnter={()=>onHover(node)} onMouseLeave={()=>onHover(null)}
-      className={`relative rounded border ${s.bg} ${s.border} p-3 cursor-pointer transition-all duration-200 select-none ${isActive?"shadow-lg scale-105 z-20":"hover:shadow-md"}`}
-      style={{ boxShadow: isActive?`0 0 16px 2px ${s.dot}55`:undefined }}>
+    <div
+      id={`node-${node.id}`}
+      onMouseEnter={() => onHover(node)}
+      onMouseLeave={() => onHover(null)}
+      className={`relative rounded border ${s.bg} ${s.border} p-3 cursor-pointer transition-all duration-200 select-none ${isActive ? "shadow-lg scale-105 z-20" : "hover:shadow-md"}`}
+      style={{ boxShadow: isActive ? `0 0 16px 2px ${s.dot}55` : undefined }}
+    >
       <div className="flex items-start justify-between gap-1 mb-1">
         <div className={`text-xs font-bold tracking-widest uppercase ${s.text}`}>{node.label}</div>
-        {node.stage && <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono whitespace-nowrap flex-shrink-0 ${STAGE_STYLES[node.stage]||"bg-slate-800 text-slate-400 border-slate-600"}`}>{node.stage}</span>}
+        {node.stage && (
+          <span className={`text-[9px] px-1.5 py-0.5 rounded border font-mono whitespace-nowrap flex-shrink-0 ${STAGE_STYLES[node.stage] || "bg-slate-800 text-slate-400 border-slate-600"}`}>
+            {node.stage}
+          </span>
+        )}
       </div>
       {node.sub && <div className="text-xs text-slate-400">{node.sub}</div>}
       {node.tags && (
         <div className="flex flex-wrap gap-1 mt-2">
-          {node.tags.map(t=><span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${s.badge}`}>{t}</span>)}
+          {node.tags.map(t => (
+            <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${s.badge}`}>{t}</span>
+          ))}
         </div>
       )}
       {category === "companies" && <CompanyScores node={node}/>}
       {category === "titles" && node.confidence != null && (
-        <ScoreBar label="Match Confidence" value={node.confidence} color={node.confidence>=80?"#34d399":node.confidence>=60?"#facc15":"#f87171"}/>
+        <div className="mt-2">
+          <ScoreBar label="Match Confidence" value={node.confidence} color={node.confidence >= 80 ? "#34d399" : node.confidence >= 60 ? "#facc15" : "#f87171"}/>
+        </div>
       )}
       {node.connections?.length > 0 && (
         <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-500 font-mono">{node.connections.length} links</div>
@@ -174,13 +190,15 @@ function Section({ title, category, nodes, onHover, activeNode }) {
   return (
     <div className="mb-8">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-2 h-2 rounded-full" style={{background:s.dot,boxShadow:`0 0 6px ${s.dot}`}}/>
+        <div className="w-2 h-2 rounded-full" style={{background:s.dot, boxShadow:`0 0 6px ${s.dot}`}}/>
         <span className={`text-xs font-bold tracking-[0.2em] uppercase ${s.text}`}>{title}</span>
         <div className="flex-1 border-t border-dashed" style={{borderColor:s.dot+"44"}}/>
         <span className="text-[10px] font-mono text-slate-500">{nodes.length} nodes</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {nodes.map(n=><NodeCard key={n.id} node={n} category={category} onHover={onHover} isActive={activeNode?.id===n.id}/>)}
+        {nodes.map(n => (
+          <NodeCard key={n.id} node={n} category={category} onHover={onHover} isActive={activeNode?.id === n.id}/>
+        ))}
       </div>
     </div>
   );
@@ -190,12 +208,12 @@ function buildPrompt(form) {
   return `You are a talent intelligence system. Return a structured talent map as JSON only — no markdown, no explanation, no backticks.
 
 Role: ${form.role}
-Company: ${form.company}
+Hiring Company: ${form.company}
 Location: ${form.location}
 Seniority: ${form.seniority}
 Skills: ${form.skills.join(", ")}
-Industries: ${form.industries.join(", ") || "Any"}
-Exclusions (do NOT include these companies or industries): ${form.exclusions.join(", ") || "None"}
+Preferred Industries: ${form.industries.join(", ") || "Any"}
+Exclusions (do NOT include these): ${form.exclusions.join(", ") || "None"}
 
 Return this exact JSON structure:
 {
@@ -209,33 +227,35 @@ Return this exact JSON structure:
     "stage": "Series B",
     "talentDensity": 78,
     "poachability": 65,
-    "likelyProfile": "One sentence describing the typical engineer background here.",
-    "poachabilitySignals": ["[Signal] First reason they might move", "[Confirmed] Second reason"]
+    "likelyProfile": "One sentence describing the typical engineer background.",
+    "poachabilitySignals": ["[Signal] First reason", "[Confirmed] Second reason"]
   }],
-  "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["skill1"], "connections": ["c1"] }],
-  "wildcards": [{ "id": "w1", "label": "Wildcard", "sub": "Unconventional angle", "tags": ["tag1"], "connections": ["c1", "a1"] }],
+  "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["tag1"], "connections": ["c1"] }],
+  "wildcards": [{ "id": "w1", "label": "Wildcard Company", "sub": "Unconventional angle", "tags": ["tag1"], "connections": ["c1", "a1"] }],
   "titles": [{ "id": "t1", "label": "Job Title", "sub": "Common at these orgs", "tags": ["variant"], "connections": [], "confidence": 90 }]
 }
 
 Rules:
 - 6-8 companies (mix of established AND 3-4 notable startups)
 - NEVER include "${form.company}" in target companies
-- confidence = relevance score 0-100
+- adjacent = 4-5 specific COMPANIES (not job titles) whose engineers have transferable skills
+- wildcards = 3-4 unconventional companies with surprising talent overlap
+- titles = 5-7 target job titles
+- confidence = relevance 0-100
 - talentDensity = concentration of relevant engineers 0-100
-- poachability = likelihood to move 0-100 (higher if layoffs, slow growth, underpaid)
-- poachabilitySignals = exactly 2-3 bullet strings prefixed with [Signal] or [Confirmed]
+- poachability = likelihood to move 0-100
+- poachabilitySignals = exactly 2-3 strings prefixed [Signal] or [Confirmed]
 - likelyProfile = 1 sentence max
 - stage = one of: Public / Late Stage / Series C+ / Series B / Series A / Seed / Enterprise
-- 4-5 adjacent pools = specific COMPANIES (not job titles) whose engineers have transferable skills relevant to this role — e.g. "Databricks", "dbt Labs", "Fivetran"
-- Return ONLY raw valid JSON. No markdown. No explanation.`;
+- Return ONLY raw valid JSON. No markdown. No backticks.`;
 }
 
 const EMPTY = { companies:[], adjacent:[], wildcards:[], titles:[] };
 
 export default function TalentMap() {
   const [form, setForm] = useState({
-    role:"", company:"", location:"", seniority:"",
-    skills:[], industries:[], exclusions:[]
+    role: "", company: "", location: "", seniority: "",
+    skills: [], industries: [], exclusions: []
   });
   const [mapData, setMapData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -243,7 +263,7 @@ export default function TalentMap() {
   const [error, setError] = useState("");
   const [generated, setGenerated] = useState(false);
   const mapRef = useRef(null);
-  const allNodes = mapData ? [...mapData.companies,...mapData.adjacent,...mapData.wildcards,...mapData.titles] : [];
+  const allNodes = mapData ? [...mapData.companies, ...mapData.adjacent, ...mapData.wildcards, ...mapData.titles] : [];
 
   async function generate() {
     if (!form.role.trim()) { setError("Role is required."); return; }
@@ -275,7 +295,8 @@ export default function TalentMap() {
 
   return (
     <div className="flex h-screen bg-slate-950 font-mono overflow-hidden">
-      <div className="w-[30%] min-w-[240px] border-r border-slate-700/60 flex flex-col bg-slate-900/90 z-10">
+      {/* LEFT PANEL */}
+      <div className="w-[30%] min-w-[260px] border-r border-slate-700/60 flex flex-col bg-slate-900/90 z-10">
         <div className="px-5 pt-5 pb-4 border-b border-slate-700/50">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-3 h-3 rounded-sm bg-sky-400" style={{boxShadow:"0 0 8px #38bdf8"}}/>
@@ -283,59 +304,69 @@ export default function TalentMap() {
           </div>
           <div className="text-[10px] text-slate-500 tracking-wider">Blueprint Intelligence System v2.1</div>
         </div>
+
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Role Title</label>
               <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
-                placeholder="e.g. Staff Engineer" value={form.role} onChange={e=>set("role", e.target.value)}/>
+                placeholder="e.g. Staff Engineer" value={form.role} onChange={e => set("role", e.target.value)}/>
             </div>
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Hiring Company</label>
               <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
-                placeholder="e.g. Atlan" value={form.company} onChange={e=>set("company", e.target.value)}/>
+                placeholder="e.g. Atlan" value={form.company} onChange={e => set("company", e.target.value)}/>
             </div>
           </div>
+
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Location</label>
               <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
-                placeholder="e.g. North America" value={form.location} onChange={e=>set("location", e.target.value)}/>
+                placeholder="e.g. North America" value={form.location} onChange={e => set("location", e.target.value)}/>
             </div>
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Seniority</label>
               <select className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                value={form.seniority} onChange={e=>set("seniority", e.target.value)}>
+                value={form.seniority} onChange={e => set("seniority", e.target.value)}>
                 <option value="">Select level</option>
-                {["Junior","Mid","Senior","Staff","Principal","Director","VP"].map(s=><option key={s}>{s}</option>)}
+                {["Junior","Mid","Senior","Staff","Principal","Director","VP"].map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
+
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Must-Have Skills</label>
-            <TagInput placeholder="Type a skill and press , or Enter" tags={form.skills} onChange={v=>set("skills", v)}/>
+            <TagInput placeholder="Type a skill, press , or Enter" tags={form.skills} onChange={v => set("skills", v)}/>
           </div>
+
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Preferred Industries</label>
-            <TagInput placeholder="e.g. Fintech, Data → press , or Enter" tags={form.industries} onChange={v=>set("industries", v)}/>
+            <TagInput placeholder="e.g. Fintech, Data → press , or Enter" tags={form.industries} onChange={v => set("industries", v)}/>
           </div>
+
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Exclusions</label>
-            <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v=>set("exclusions", v)}/>
+            <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v => set("exclusions", v)}/>
           </div>
+
           {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
+
           <button onClick={generate} disabled={loading}
             className="w-full py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
-            style={{boxShadow:loading?"none":"0 0 12px #38bdf855"}}>
+            style={{boxShadow: loading ? "none" : "0 0 12px #38bdf855"}}>
             {loading ? "Generating..." : "Generate Map"}
           </button>
         </div>
+
         <div className="px-5 py-4 border-t border-slate-700/50 space-y-2">
           <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">Legend</div>
-          {Object.entries(CATEGORY_STYLES).map(([k,s])=>(
+          {Object.entries(CATEGORY_STYLES).map(([k, s]) => (
             <div key={k} className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:s.dot}}/>
-              <span className="text-[10px] text-slate-500">{k==="companies"?"Target Companies":k==="adjacent"?"Adjacent Pools":k==="wildcards"?"Wildcard Bets":"Target Titles"}</span>
+              <span className="text-[10px] text-slate-500">
+                {k==="companies" ? "Target Companies" : k==="adjacent" ? "Adjacent Pools" : k==="wildcards" ? "Wildcard Bets" : "Target Titles"}
+              </span>
             </div>
           ))}
           <div className="flex items-center gap-2 pt-1">
@@ -345,6 +376,7 @@ export default function TalentMap() {
         </div>
       </div>
 
+      {/* RIGHT MAP */}
       <div className="flex-1 relative overflow-y-auto" ref={mapRef}>
         <BlueprintGrid/>
         <LaserLines nodes={allNodes} activeNode={activeNode} containerRef={mapRef}/>
