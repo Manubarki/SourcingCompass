@@ -231,7 +231,7 @@ Return this exact JSON structure:
     "poachabilitySignals": ["[Signal] First reason", "[Confirmed] Second reason"]
   }],
   "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["tag1"], "connections": ["c1"] }],
-  "wildcards": [{ "id": "w1", "label": "Wildcard Company", "sub": "Unconventional angle", "tags": ["tag1"], "connections": ["c1", "a1"] }],
+  "wildcards": [{ "id": "w1", "label": "Real Company Name", "sub": "Specific reason why their engineers are a surprising but valid match", "tags": ["overlap"], "connections": ["c1", "a1"] }],
   "titles": [{ "id": "t1", "label": "Job Title", "sub": "Common at these orgs", "tags": ["variant"], "connections": [], "confidence": 90 }]
 }
 
