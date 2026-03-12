@@ -3,25 +3,23 @@ export const config = { api: { bodyParser: true } };
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return res.status(500).json({ error: "OPENROUTER_API_KEY is undefined" });
-  if (!key.startsWith("sk-or-")) return res.status(500).json({ error: `Key format unexpected, starts with: ${key.slice(0,8)}` });
-
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     const prompt = body.messages?.[0]?.content || "";
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://sourcing-compass.vercel.app",
+        "X-Title": "SourcingCompass",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4000,
+        model: "meta-llama/llama-3.3-70b-instruct:free",
         messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 4000,
       }),
     });
 
@@ -34,7 +32,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: data?.error?.message || JSON.stringify(data) });
     }
 
-    const text = data.content?.map(b => b.text || "").join("").trim();
+    const text = data.choices?.[0]?.message?.content || "{}";
     res.status(200).json({ content: [{ type: "text", text }] });
 
   } catch (err) {
