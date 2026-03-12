@@ -237,6 +237,7 @@ Return this exact JSON structure:
 
 Rules:
 - 6-8 companies (mix of established AND 3-4 notable startups)
+- CRITICAL: Only include real companies that actually exist. Do NOT invent or combine company names.
 - NEVER include "${form.company}" in target companies
 - adjacent = 4-5 specific COMPANIES (not job titles) whose engineers have transferable skills
 - wildcards = 3-4 unconventional companies with surprising talent overlap
@@ -300,9 +301,9 @@ export default function TalentMap() {
         <div className="px-5 pt-5 pb-4 border-b border-slate-700/50">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-3 h-3 rounded-sm bg-sky-400" style={{boxShadow:"0 0 8px #38bdf8"}}/>
-            <span className="text-sky-400 text-xs font-bold tracking-[0.25em] uppercase">Talent Map</span>
+            <span className="text-sky-400 text-xs font-bold tracking-[0.25em] uppercase">SourcingCompass</span>
           </div>
-          <div className="text-[10px] text-slate-500 tracking-wider">Blueprint Intelligence System v2.1</div>
+          <div className="text-[10px] text-slate-500 tracking-wider">Talent Intelligence System</div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
