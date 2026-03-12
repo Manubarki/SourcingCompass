@@ -16,7 +16,7 @@ export default async function handler(req, res) {
         "X-Title": "SourcingCompass",
       },
       body: JSON.stringify({
-        model: "qwen/qwen3-235b-a22b:free",
+        model: "qwen/qwen3-next-80b-a3b-instruct:free",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 4000,
