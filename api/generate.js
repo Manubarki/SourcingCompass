@@ -16,7 +16,7 @@ export default async function handler(req, res) {
         "X-Title": "SourcingCompass",
       },
       body: JSON.stringify({
-        model: "qwen/qwen3-4b:free",
+        model: "openai/gpt-oss-120b:free",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 4000,
