@@ -132,13 +132,19 @@ function HoverTooltip({ node, visible }) {
     <div
       className="absolute top-0 left-full z-50 pl-2 pointer-events-none"
       style={{
-        width: "220px",
+        width: "260px",
         opacity: visible ? 1 : 0,
         transform: visible ? "translateX(0px)" : "translateX(-12px)",
         transition: "opacity 0.25s ease, transform 0.25s ease",
       }}
     >
       <div className="bg-slate-800 border border-sky-500/40 rounded-lg p-3 shadow-xl" style={{borderLeft:"3px solid #38bdf8"}}>
+        {node.outreachAngle && (
+          <div className="mb-2 pb-2 border-b border-slate-700/50">
+            <div className="text-[9px] text-orange-400 tracking-widest uppercase mb-1">Atlan Outreach Angle</div>
+            <div className="text-[11px] text-slate-300 leading-relaxed">{node.outreachAngle}</div>
+          </div>
+        )}
         {node.whyRelevant && (
           <div className="mb-2">
             <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Why relevant</div>
@@ -229,8 +235,19 @@ function Section({ category, nodes }) {
   );
 }
 
-function buildPrompt(form) {
+const ATLAN_CONTEXT = `Atlan is a data catalog and active metadata platform that helps companies build an enterprise context layer for AI. Key concepts:
+- Context layer = shared institutional knowledge (definitions, rules, relationships) made machine-readable for AI agents
+- Context products = data + meaning packaged as reusable units per domain (e.g. "Customer Revenue", "Churn Risk")
+- Minimum Viable Context (MVC) = when an AI agent can reliably answer golden questions for a domain
+- Poachability signals = every AI interaction feeds back into the context layer, making it self-healing
+- Key belief: In a world where everyone has the same models, context becomes the company's real IP
+- Atlan solves the "AI context gap" — models are smart but don't understand your business without context
+- Used by data teams, CDOs, and AI platform teams to stop context from fragmenting across agents`;
+
+
   return `You are a talent intelligence system. Return a structured talent map as JSON only — no markdown, no explanation, no backticks.
+
+${ATLAN_CONTEXT}
 
 Role: ${form.role}
 Hiring Company: ${form.company}
@@ -248,8 +265,7 @@ Return this exact JSON structure:
     "talentDensity": 78, "poachability": 65,
     "likelyProfile": "One sentence describing the typical engineer background.",
     "poachabilitySignals": ["[Signal] First reason", "[Confirmed] Second reason"],
-    "whyRelevant": "1-2 sentences explaining why this company is a good source for this specific role.",
-    "searchTitles": ["Exact Title 1", "Exact Title 2", "Exact Title 3"]
+    "outreachAngle": "2-3 sentence outreach hook explaining why an engineer at this company would care about Atlan's context layer vision — be specific to what this company builds"
   }],
   "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["tag1"], "connections": [] }],
   "wildcards": [{ "id": "w1", "label": "Real Company Name", "sub": "Specific non-obvious reason their engineers are a great match", "tags": ["overlap"], "connections": [] }],
@@ -263,6 +279,7 @@ Rules:
 - adjacent = 4-5 specific COMPANIES (not job titles) whose engineers have transferable skills
 - wildcards = 3-4 unconventional REAL companies with a specific non-obvious reason
 - titles = 5-7 EXACT job titles as they appear on real job postings
+- outreachAngle = 2-3 sentences specific to what that company builds and why Atlan's context layer vision would resonate with their engineers. Use the context layer framing: context as IP, context products, MVC, AI context gap. Be concrete, not generic.
 - whyRelevant = 1-2 sentences specific to this role
 - searchTitles = 2-3 exact LinkedIn search titles that work best at this specific company
 - confidence = relevance 0-100, talentDensity = 0-100, poachability = 0-100
