@@ -2,20 +2,22 @@ import { useState, useRef } from "react";
 
 const GRID_SIZE = 40;
 
-const OUTREACH_EXAMPLE = `Here is an example of a great outreach message from Atlan. Match this style — mission-led, specific to their background, connects their skills to the role, ends with a soft CTA:
-
-"I hope you are doing well. I'm reaching out from Atlan. Our mission is to become the context layer for the AI world — building the foundational primitives that will power the next generation of apps and agents. One of the core bets is our data platform: Building a control plane that transforms existing lakehouse architectures into AI-ready context stores with governance, multimodal capabilities (structured, unstructured, vector, graph), and extensibility. Your background as a [title], with experience in [specific area], aligns well with our needs. We're looking for someone to take deep ownership of [responsibility] — end-to-end, high impact. Your expertise in [skill1] and [skill2] would be invaluable to our team. We're also intentionally AI-native in how we design and ship systems, using modern AI tools for real engineering leverage while owning outcomes fully. Open to a quick chat?"
-
-Style rules:
-- Open with "I hope you are doing well. I'm reaching out from Atlan."
-- State Atlan's mission in 1-2 sentences using context layer framing
-- Connect to a specific technical area relevant to the company/role
-- Reference their specific background, title, and 2-3 skills with [placeholders]
-- State what they'd own at Atlan — specific, high impact
-- Mention AI-native work culture
-- End with "Open to a quick chat?"
-- Keep it under 150 words
-- No fluff, no generic praise`;
+const OUTREACH_EXAMPLE = [
+  "Here is an example of a great outreach message from Atlan. Match this style — mission-led, specific to their background, connects their skills to the role, ends with a soft CTA:",
+  "",
+  "I hope you are doing well. I'm reaching out from Atlan. Our mission is to become the context layer for the AI world — building the foundational primitives that will power the next generation of apps and agents. One of the core bets is our data platform: Building a control plane that transforms existing lakehouse architectures into AI-ready context stores with governance, multimodal capabilities (structured, unstructured, vector, graph), and extensibility. Your background as a [title], with experience in [specific area], aligns well with our needs. We're looking for someone to take deep ownership of [responsibility] — end-to-end, high impact. Your expertise in [skill1] and [skill2] would be invaluable to our team. We're also intentionally AI-native in how we design and ship systems, using modern AI tools for real engineering leverage while owning outcomes fully. Open to a quick chat?",
+  "",
+  "Style rules:",
+  "- Open with: I hope you are doing well. I'm reaching out from Atlan.",
+  "- State Atlan's mission in 1-2 sentences using context layer framing",
+  "- Connect to a specific technical area relevant to the company and role",
+  "- Reference their specific background, title, and 2-3 skills with [placeholders]",
+  "- State what they would own at Atlan — specific, high impact",
+  "- Mention AI-native work culture",
+  "- End with: Open to a quick chat?",
+  "- Keep it under 150 words",
+  "- No fluff, no generic praise",
+].join("\n");
 
 - Context layer = shared institutional knowledge (definitions, rules, relationships) made machine-readable for AI agents
 - Context products = data + meaning packaged as reusable units per domain
