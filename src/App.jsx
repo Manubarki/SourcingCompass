@@ -242,7 +242,7 @@ function buildPrompt(form) {
     "- NEVER include " + form.company + " in results",
     "- Only suggest companies with real engineering teams in " + (form.location || "the specified location"),
     "- adjacent = 4-5 specific companies with transferable skills, not job titles",
-    "- wildcards = 3-4 unconventional real companies with non-obvious reasons",
+    "- wildcards = 3-4 unconventional TECH companies (not banks, manufacturers, or conglomerates) with engineers who have surprising but specific skill overlap with the role. Must be software/internet/data companies.",
     "- titles = 5-7 exact job titles as on real postings",
     "- confidence/talentDensity/poachability = 0-100",
     "- poachabilitySignals = 2-3 strings prefixed [Signal] or [Confirmed]",
