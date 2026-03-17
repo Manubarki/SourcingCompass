@@ -462,6 +462,11 @@ ${form.jd.slice(0, 2000)}` }]
                   placeholder="Paste JD here — click Parse JD to auto-fill role, seniority and skills..."
                   value={form.jd}
                   onChange={e => set("jd", e.target.value)}
+                  onPaste={e => {
+                    const text = e.clipboardData.getData("text");
+                    e.preventDefault();
+                    set("jd", form.jd + text);
+                  }}
                 />
                 <button
                   type="button"
