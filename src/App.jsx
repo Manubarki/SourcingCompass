@@ -112,11 +112,19 @@ function CompanyScores({ node }) {
 }
 
 function HoverTooltip({ node, visible }) {
-  if (!visible || (!node.whyRelevant && !node.searchTitles?.length)) return null;
+  if (!node.whyRelevant && !node.searchTitles?.length) return null;
   return (
-    <div className="absolute left-0 right-0 -bottom-1 translate-y-full z-50 pointer-events-none"
-      style={{filter:"drop-shadow(0 4px 12px rgba(0,0,0,0.5))"}}>
-      <div className="bg-slate-800 border border-sky-500/40 rounded mt-1 p-3 text-left">
+    <div
+      className="absolute top-0 left-full z-50 pl-2 pointer-events-none"
+      style={{
+        width: "220px",
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateX(0px)" : "translateX(-12px)",
+        transition: "opacity 0.25s ease, transform 0.25s ease",
+      }}
+    >
+      <div className="bg-slate-800 border border-sky-500/40 rounded-lg p-3 shadow-xl"
+        style={{borderLeft: "3px solid #38bdf8"}}>
         {node.whyRelevant && (
           <div className="mb-2">
             <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Why relevant</div>
@@ -125,8 +133,8 @@ function HoverTooltip({ node, visible }) {
         )}
         {node.searchTitles?.length > 0 && (
           <div>
-            <div className="text-[9px] text-sky-400 tracking-widests uppercase mb-1">Search on LinkedIn</div>
-            <div className="flex flex-wrap gap-1 mt-1">
+            <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Search on LinkedIn</div>
+            <div className="flex flex-col gap-1 mt-1">
               {node.searchTitles.map((t, i) => (
                 <span key={i} className="text-[10px] bg-sky-900/60 border border-sky-700/60 text-sky-300 px-1.5 py-0.5 rounded font-mono">{t}</span>
               ))}
@@ -145,7 +153,7 @@ function NodeCard({ node, category }) {
   return (
     <div
       id={`node-${node.id}`}
-      className={`relative rounded border ${s.bg} ${s.border} p-3 transition-all duration-200 select-none ${hovered ? "shadow-lg z-20" : "hover:shadow-md"}`}
+      className={`relative rounded border ${s.bg} ${s.border} p-3 transition-all duration-200 select-none overflow-visible ${hovered ? "shadow-lg z-20" : "hover:shadow-md"}`}
       style={{ boxShadow: hovered ? `0 0 16px 2px ${s.dot}55` : undefined }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -173,11 +181,6 @@ function NodeCard({ node, category }) {
         </div>
       )}
       {hasTooltip && <HoverTooltip node={node} visible={hovered}/>}
-      {hasTooltip && (
-        <div className="mt-2 pt-2 border-t border-slate-700/30">
-          <div className="text-[9px] text-slate-600 tracking-widest">hover for linkedin tips →</div>
-        </div>
-      )}
     </div>
   );
 }
