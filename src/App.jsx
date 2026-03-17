@@ -223,6 +223,8 @@ function buildPrompt(form) {
   return [
     "You are a talent intelligence system. Return a structured talent map as JSON only. No markdown, no explanation, no backticks.",
     "",
+    "CRITICAL: Every company you suggest MUST be a real company that exists today. Do NOT invent community groups, open source projects, contributor pools, or spin-off descriptions as company names. Only suggest actual incorporated companies.",
+    "",
     "Role: " + form.role,
     "Hiring Company: " + form.company,
     "Location: " + form.location,
