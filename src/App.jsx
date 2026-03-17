@@ -2,6 +2,15 @@ import { useState, useRef } from "react";
 
 const GRID_SIZE = 40;
 
+const ATLAN_CONTEXT = `Atlan is a data catalog and active metadata platform that helps companies build an enterprise context layer for AI. Key concepts:
+- Context layer = shared institutional knowledge (definitions, rules, relationships) made machine-readable for AI agents
+- Context products = data + meaning packaged as reusable units per domain (e.g. "Customer Revenue", "Churn Risk")
+- Minimum Viable Context (MVC) = when an AI agent can reliably answer golden questions for a domain
+- Every AI interaction feeds back into the context layer, making it self-healing over time
+- Key belief: In a world where everyone has the same models, context becomes the company's real IP
+- Atlan solves the "AI context gap" — models are smart but don't understand your business without context
+- Used by data teams, CDOs, and AI platform teams to stop context from fragmenting across agents`;
+
 function BlueprintGrid() {
   return (
     <svg className="absolute inset-0 w-full h-full" style={{opacity:0.15}}>
@@ -127,7 +136,7 @@ function CompanyScores({ node }) {
 }
 
 function HoverTooltip({ node, visible }) {
-  if (!node.whyRelevant && !node.searchTitles?.length) return null;
+  if (!node.outreachAngle && !node.whyRelevant && !node.searchTitles?.length) return null;
   return (
     <div
       className="absolute top-0 left-full z-50 pl-2 pointer-events-none"
@@ -173,7 +182,7 @@ function HoverTooltip({ node, visible }) {
 function NodeCard({ node, category }) {
   const [hovered, setHovered] = useState(false);
   const s = CATEGORY_STYLES[category];
-  const hasTooltip = category === "companies" && (node.whyRelevant || node.searchTitles?.length > 0);
+  const hasTooltip = category === "companies" && (node.outreachAngle || node.whyRelevant || node.searchTitles?.length > 0);
   return (
     <div
       id={`node-${node.id}`}
@@ -235,16 +244,7 @@ function Section({ category, nodes }) {
   );
 }
 
-const ATLAN_CONTEXT = `Atlan is a data catalog and active metadata platform that helps companies build an enterprise context layer for AI. Key concepts:
-- Context layer = shared institutional knowledge (definitions, rules, relationships) made machine-readable for AI agents
-- Context products = data + meaning packaged as reusable units per domain (e.g. "Customer Revenue", "Churn Risk")
-- Minimum Viable Context (MVC) = when an AI agent can reliably answer golden questions for a domain
-- Poachability signals = every AI interaction feeds back into the context layer, making it self-healing
-- Key belief: In a world where everyone has the same models, context becomes the company's real IP
-- Atlan solves the "AI context gap" — models are smart but don't understand your business without context
-- Used by data teams, CDOs, and AI platform teams to stop context from fragmenting across agents`;
-
-
+function buildPrompt(form) {
   return `You are a talent intelligence system. Return a structured talent map as JSON only — no markdown, no explanation, no backticks.
 
 ${ATLAN_CONTEXT}
@@ -265,7 +265,9 @@ Return this exact JSON structure:
     "talentDensity": 78, "poachability": 65,
     "likelyProfile": "One sentence describing the typical engineer background.",
     "poachabilitySignals": ["[Signal] First reason", "[Confirmed] Second reason"],
-    "outreachAngle": "2-3 sentence outreach hook explaining why an engineer at this company would care about Atlan's context layer vision — be specific to what this company builds"
+    "whyRelevant": "1-2 sentences explaining why this company is a good source for this specific role.",
+    "searchTitles": ["Exact Title 1", "Exact Title 2", "Exact Title 3"],
+    "outreachAngle": "2-3 sentence outreach hook explaining why an engineer at this company would care about Atlan's context layer vision — be specific to what this company builds and use context layer framing."
   }],
   "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["tag1"], "connections": [] }],
   "wildcards": [{ "id": "w1", "label": "Real Company Name", "sub": "Specific non-obvious reason their engineers are a great match", "tags": ["overlap"], "connections": [] }],
@@ -279,7 +281,7 @@ Rules:
 - adjacent = 4-5 specific COMPANIES (not job titles) whose engineers have transferable skills
 - wildcards = 3-4 unconventional REAL companies with a specific non-obvious reason
 - titles = 5-7 EXACT job titles as they appear on real job postings
-- outreachAngle = 2-3 sentences specific to what that company builds and why Atlan's context layer vision would resonate with their engineers. Use the context layer framing: context as IP, context products, MVC, AI context gap. Be concrete, not generic.
+- outreachAngle = 2-3 sentences specific to what that company builds and why Atlan's context layer vision resonates. Use framing like: context as IP, context products, MVC, AI context gap. Be concrete not generic.
 - whyRelevant = 1-2 sentences specific to this role
 - searchTitles = 2-3 exact LinkedIn search titles that work best at this specific company
 - confidence = relevance 0-100, talentDensity = 0-100, poachability = 0-100
@@ -363,7 +365,7 @@ ${jdText.slice(0, 2000)}`
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 3000,
+          max_tokens: 4000,
           messages: [{ role: "user", content: buildPrompt(form) }]
         })
       });
@@ -381,11 +383,11 @@ ${jdText.slice(0, 2000)}`
   }
 
   function exportCSV() {
-    const rows = [["Section","Company/Title","Stage","Relevance","Talent Density","Poachability","Likely Profile","Poachability Signals","Why Relevant","Search Titles","Tags"]];
-    mapData.companies.forEach(n => rows.push(["Target Company",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.searchTitles||[]).join(" | "),(n.tags||[]).join(", ")]));
-    mapData.adjacent.forEach(n => rows.push(["Adjacent Pool",n.label,"","","","","","",n.sub||"","",(n.tags||[]).join(", ")]));
-    mapData.wildcards.forEach(n => rows.push(["Wildcard Bet",n.label,"","","","","","",n.sub||"","",(n.tags||[]).join(", ")]));
-    mapData.titles.forEach(n => rows.push(["Target Title",n.label,"",n.confidence||"","","","","",n.sub||"","",(n.tags||[]).join(", ")]));
+    const rows = [["Section","Company/Title","Stage","Relevance","Talent Density","Poachability","Likely Profile","Poachability Signals","Why Relevant","Outreach Angle","Search Titles","Tags"]];
+    mapData.companies.forEach(n => rows.push(["Target Company",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",n.outreachAngle||"",(n.searchTitles||[]).join(" | "),(n.tags||[]).join(", ")]));
+    mapData.adjacent.forEach(n => rows.push(["Adjacent Pool",n.label,"","","","","","",n.sub||"","","",(n.tags||[]).join(", ")]));
+    mapData.wildcards.forEach(n => rows.push(["Wildcard Bet",n.label,"","","","","","",n.sub||"","","",(n.tags||[]).join(", ")]));
+    mapData.titles.forEach(n => rows.push(["Target Title",n.label,"",n.confidence||"","","","","",n.sub||"","","",(n.tags||[]).join(", ")]));
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], {type:"text/csv"});
     const url = URL.createObjectURL(blob);
@@ -467,7 +469,6 @@ ${jdText.slice(0, 2000)}`
             <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v => set("exclusions", v)}/>
           </div>
 
-          {/* JD Parser */}
           <div>
             <button
               type="button"
@@ -523,7 +524,7 @@ ${jdText.slice(0, 2000)}`
           ))}
           <div className="flex items-center gap-2 pt-1">
             <div className="w-4 border-t border-dashed border-sky-400"/>
-            <span className="text-[10px] text-slate-500">Hover companies for LinkedIn tips</span>
+            <span className="text-[10px] text-slate-500">Hover companies for outreach tips</span>
           </div>
         </div>
       </div>
@@ -550,7 +551,7 @@ ${jdText.slice(0, 2000)}`
               <div>
                 <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
                 <div className="text-slate-500 text-xs mt-1">{[form.company, form.location].filter(Boolean).join(" · ")}</div>
-                <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover companies for LinkedIn search tips</div>
+                <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover companies for outreach angles</div>
               </div>
               <button
                 type="button"
