@@ -261,7 +261,8 @@ function OutreachSection({ companies, form }) {
       const data = await res.json();
       const raw = data.content?.map(b => b.text || "").join("").trim();
       const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
-      setOutreachMap(prev => ({ ...prev, [company.id]: parsed }));
+      const filtered = parsed.filter(m => !m.angle?.toLowerCase().includes("poachab"));
+      setOutreachMap(prev => ({ ...prev, [company.id]: filtered }));
     } catch(e) { setError("Failed to generate: " + e.message); }
     setLoadingIdx(null);
   }
