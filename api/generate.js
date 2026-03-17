@@ -56,8 +56,8 @@ function filterAndFormat(companies, role, skills, industries) {
     return { ...c, score };
   });
 
-  const relevant = scored.filter(c => c.score > 0).sort((a, b) => b.score - a.score).slice(0, 40);
-  const others = scored.filter(c => c.score === 0).sort(() => Math.random() - 0.5).slice(0, 10);
+  const relevant = scored.filter(c => c.score > 0).sort((a, b) => b.score - a.score).slice(0, 30);
+  const others = scored.filter(c => c.score === 0).sort(() => Math.random() - 0.5).slice(0, 5);
 
   return [...relevant, ...others]
     .map(c => [c.name, c.sub || c.category, c.funding].filter(Boolean).join(" | "))
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         messages: [{ role: "user", content: finalPrompt }],
-        max_tokens: 2000,
+        max_tokens: 4000,
       }),
     });
 
