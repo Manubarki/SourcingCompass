@@ -283,11 +283,11 @@ export default function TalentMap() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [generated, setGenerated] = useState(false);
-  const [showJD, setShowJD] = useState(false);
+  const jdRef = useRef(null);
   const mapRef = useRef(null);
   const allNodes = mapData ? [...mapData.companies, ...mapData.adjacent, ...mapData.wildcards, ...mapData.titles] : [];
 
-  const [parsing, setParsing] = useState(false);
+  const [showJD, setShowJD] = useState(false);
 
   async function parseJD() {
     if (!form.jd.trim()) return;
@@ -457,18 +457,11 @@ ${form.jd.slice(0, 2000)}` }]
             {showJD && (
               <div className="mt-2 space-y-2">
                 <textarea
+                  ref={jdRef}
                   rows={5}
                   className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none transition-colors"
                   placeholder="Paste JD here — click Parse JD to auto-fill role, seniority and skills..."
-                  value={form.jd}
-                  onChange={e => set("jd", e.target.value)}
-                  onPaste={e => {
-                    e.stopPropagation();
-                    const text = e.clipboardData.getData("text");
-                    e.preventDefault();
-                    set("jd", form.jd + text);
-                  }}
-                  onClick={e => e.stopPropagation()}
+                  defaultValue=""
                 />
                 <button
                   type="button"
