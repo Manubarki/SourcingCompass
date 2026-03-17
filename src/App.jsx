@@ -295,7 +295,33 @@ export default function TalentMap() {
     setLoading(false);
   }
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  function exportCSV() {
+    const rows = [
+      ["Section", "Company/Title", "Stage", "Relevance", "Talent Density", "Poachability", "Likely Profile", "Poachability Signals", "Why Relevant", "Search Titles", "Tags"]
+    ];
+    mapData.companies.forEach(n => rows.push([
+      "Target Company", n.label, n.stage || "", n.confidence || "", n.talentDensity || "", n.poachability || "",
+      n.likelyProfile || "", (n.poachabilitySignals || []).join(" | "), n.whyRelevant || "",
+      (n.searchTitles || []).join(" | "), (n.tags || []).join(", ")
+    ]));
+    mapData.adjacent.forEach(n => rows.push([
+      "Adjacent Pool", n.label, "", "", "", "", "", "", n.sub || "", "", (n.tags || []).join(", ")
+    ]));
+    mapData.wildcards.forEach(n => rows.push([
+      "Wildcard Bet", n.label, "", "", "", "", "", "", n.sub || "", "", (n.tags || []).join(", ")
+    ]));
+    mapData.titles.forEach(n => rows.push([
+      "Target Title", n.label, "", n.confidence || "", "", "", "", "", n.sub || "", "", (n.tags || []).join(", ")
+    ]));
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SourcingCompass_${form.role.replace(/\s+/g, "_")}_${form.company || "export"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="flex h-screen bg-slate-950 font-mono overflow-hidden">
@@ -348,11 +374,20 @@ export default function TalentMap() {
             <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v => set("exclusions", v)}/>
           </div>
           {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
-          <button onClick={generate} disabled={loading}
-            className="w-full py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
-            style={{boxShadow: loading ? "none" : "0 0 12px #38bdf855"}}>
-            {loading ? "Generating..." : "Generate Map"}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={generate} disabled={loading}
+              className="flex-1 py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
+              style={{boxShadow: loading ? "none" : "0 0 12px #38bdf855"}}>
+              {loading ? "Generating..." : "Generate Map"}
+            </button>
+            {mapData && !loading && (
+              <button onClick={exportCSV}
+                className="py-2.5 px-3 rounded text-xs font-bold tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white transition-all"
+                title="Export to CSV">
+                ↓ CSV
+              </button>
+            )}
+          </div>
         </div>
         <div className="px-5 py-4 border-t border-slate-700/50 space-y-2">
           <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">Legend</div>
