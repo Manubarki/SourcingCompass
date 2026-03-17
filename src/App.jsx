@@ -39,6 +39,7 @@ const STAGE_STYLES = {
 function TagInput({ placeholder, tags, onChange }) {
   const [input, setInput] = useState("");
   const inputRef = useRef(null);
+
   function handleKey(e) {
     if ((e.key === "," || e.key === "Enter") && input.trim()) {
       e.preventDefault();
@@ -48,12 +49,18 @@ function TagInput({ placeholder, tags, onChange }) {
       onChange(tags.slice(0, -1));
     }
   }
+
   function handlePaste(e) {
     e.preventDefault();
     const pasted = e.clipboardData.getData("text");
     const newTags = pasted.split(/[,\n]+/).map(t => t.trim()).filter(Boolean);
-    if (newTags.length) onChange([...tags, ...newTags]);
+    if (newTags.length > 1) {
+      onChange([...tags, ...newTags]);
+    } else {
+      setInput(pasted.trim());
+    }
   }
+
   return (
     <div
       className="w-full min-h-[38px] bg-slate-800 border border-slate-600 rounded px-2 py-1.5 flex flex-wrap gap-1 focus-within:border-sky-500 transition-colors cursor-text"
@@ -141,12 +148,12 @@ function HoverTooltip({ node, visible }) {
         {node.searchTitles?.length > 0 && (
           <div>
             <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Search on LinkedIn</div>
-            <div className="flex flex-col gap-1 mt-1">
+            <div className="flex flex-col gap-1 mt-1" style={{pointerEvents:"all"}}>
               {node.searchTitles.map((t, i) => (
-                <span key={i}
+                <span
+                  key={i}
                   className="text-[10px] bg-sky-900/60 border border-sky-700/60 text-sky-300 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-sky-800/60"
                   onClick={() => window.open(`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(t)}`, "_blank")}
-                  style={{pointerEvents:"all"}}
                 >{t} ↗</span>
               ))}
             </div>
@@ -196,7 +203,7 @@ function NodeCard({ node, category }) {
   );
 }
 
-function SectionHeader({ category, count }) {
+function Section({ category, nodes }) {
   const s = CATEGORY_STYLES[category];
   const descriptions = {
     companies: "Direct sourcing targets — companies where your ideal candidate likely works today",
@@ -205,22 +212,16 @@ function SectionHeader({ category, count }) {
     titles:    "Exact LinkedIn search terms — copy these directly into your search",
   };
   return (
-    <div className="mb-3">
-      <div className="flex items-center gap-2 mb-1">
-        <div className="w-2 h-2 rounded-full" style={{background:s.dot, boxShadow:`0 0 6px ${s.dot}`}}/>
-        <span className={`text-xs font-bold tracking-[0.2em] uppercase ${s.text}`}>{s.label}</span>
-        <div className="flex-1 border-t border-dashed" style={{borderColor:s.dot+"44"}}/>
-        <span className="text-[10px] font-mono text-slate-500">{count} nodes</span>
-      </div>
-      <div className="text-[10px] text-slate-600 ml-4">{descriptions[category]}</div>
-    </div>
-  );
-}
-
-function Section({ category, nodes }) {
-  return (
     <div className="mb-8">
-      <SectionHeader category={category} count={nodes.length}/>
+      <div className="mb-3">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-2 h-2 rounded-full" style={{background:s.dot, boxShadow:`0 0 6px ${s.dot}`}}/>
+          <span className={`text-xs font-bold tracking-[0.2em] uppercase ${s.text}`}>{s.label}</span>
+          <div className="flex-1 border-t border-dashed" style={{borderColor:s.dot+"44"}}/>
+          <span className="text-[10px] font-mono text-slate-500">{nodes.length} nodes</span>
+        </div>
+        <div className="text-[10px] text-slate-600 ml-4">{descriptions[category]}</div>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         {nodes.map(n => <NodeCard key={n.id} node={n} category={category}/>)}
       </div>
@@ -238,7 +239,6 @@ Seniority: ${form.seniority}
 Skills: ${form.skills.join(", ")}
 Preferred Industries: ${form.industries.join(", ") || "Any"}
 Exclusions (do NOT include these): ${form.exclusions.join(", ") || "None"}
-${form.jd ? `Job Description: ${form.jd.slice(0, 1000)}` : ""}
 
 Return this exact JSON structure:
 {
@@ -277,21 +277,28 @@ const EMPTY = { companies:[], adjacent:[], wildcards:[], titles:[] };
 export default function TalentMap() {
   const [form, setForm] = useState({
     role:"", company:"", location:"", seniority:"Senior",
-    skills:[], industries:[], exclusions:[], jd:""
+    skills:[], industries:[], exclusions:[]
   });
   const [mapData, setMapData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
   const [generated, setGenerated] = useState(false);
+  const [showJD, setShowJD] = useState(false);
   const jdRef = useRef(null);
   const mapRef = useRef(null);
-  const allNodes = mapData ? [...mapData.companies, ...mapData.adjacent, ...mapData.wildcards, ...mapData.titles] : [];
 
-  const [showJD, setShowJD] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const allNodes = mapData
+    ? [...mapData.companies, ...mapData.adjacent, ...mapData.wildcards, ...mapData.titles]
+    : [];
 
   async function parseJD() {
-    if (!form.jd.trim()) return;
+    const jdText = jdRef.current?.value || "";
+    if (!jdText.trim()) return;
     setParsing(true);
+    setError("");
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -299,7 +306,9 @@ export default function TalentMap() {
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
           max_tokens: 500,
-          messages: [{ role: "user", content: `Extract the following from this job description and return ONLY raw valid JSON, no markdown, no explanation:
+          messages: [{
+            role: "user",
+            content: `Extract the following from this job description and return ONLY raw valid JSON, no markdown, no backticks, no explanation:
 {
   "role": "exact job title",
   "seniority": "one of: Junior / Mid / Senior / Staff / Principal / Director / VP",
@@ -307,7 +316,8 @@ export default function TalentMap() {
 }
 
 Job Description:
-${form.jd.slice(0, 2000)}` }]
+${jdText.slice(0, 2000)}`
+          }]
         })
       });
       const data = await res.json();
@@ -322,7 +332,7 @@ ${form.jd.slice(0, 2000)}` }]
       }));
       setShowJD(false);
     } catch(e) {
-      setError(`JD parse error: ${e.message}`);
+      setError(`JD parse failed: ${e.message}`);
     }
     setParsing(false);
   }
@@ -382,7 +392,6 @@ ${form.jd.slice(0, 2000)}` }]
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Role + Company */}
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Role Title</label>
@@ -404,7 +413,6 @@ ${form.jd.slice(0, 2000)}` }]
             </div>
           </div>
 
-          {/* Location + Seniority */}
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Location</label>
@@ -427,46 +435,42 @@ ${form.jd.slice(0, 2000)}` }]
             </div>
           </div>
 
-          {/* Skills */}
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Must-Have Skills</label>
             <TagInput placeholder="Type skill, press , or Enter" tags={form.skills} onChange={v => set("skills", v)}/>
           </div>
 
-          {/* Industries */}
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Preferred Industries</label>
             <TagInput placeholder="e.g. Fintech, Data" tags={form.industries} onChange={v => set("industries", v)}/>
           </div>
 
-          {/* Exclusions */}
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Exclusions</label>
             <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v => set("exclusions", v)}/>
           </div>
 
-          {/* JD paste toggle */}
+          {/* JD Parser */}
           <div>
             <button
               type="button"
               onClick={() => setShowJD(v => !v)}
               className="text-[10px] text-sky-500 hover:text-sky-300 tracking-widest uppercase transition-colors"
             >
-              {showJD ? "▾ Hide" : "▸ Paste"} Job Description (optional)
+              {showJD ? "▾ Hide" : "▸ Paste"} Job Description
             </button>
             {showJD && (
               <div className="mt-2 space-y-2">
                 <textarea
                   ref={jdRef}
-                  rows={5}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none transition-colors"
-                  placeholder="Paste JD here — click Parse JD to auto-fill role, seniority and skills..."
-                  defaultValue=""
+                  rows={6}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none"
+                  placeholder="Paste your JD here..."
                 />
                 <button
                   type="button"
                   onClick={parseJD}
-                  disabled={parsing || !form.jd.trim()}
+                  disabled={parsing}
                   className="w-full py-2 rounded text-xs font-bold tracking-widest uppercase bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40 transition-all"
                 >
                   {parsing ? "Parsing..." : "⚡ Parse JD — Auto-fill Fields"}
@@ -475,37 +479,23 @@ ${form.jd.slice(0, 2000)}` }]
             )}
           </div>
 
-          {/* AI disclaimer */}
           <div className="text-[9px] text-slate-600 bg-slate-800/50 border border-slate-700 rounded px-3 py-2 leading-relaxed">
             ⚠ AI-generated results. Verify companies before sourcing.
           </div>
 
           {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
 
-          {/* Buttons */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={generate}
-              disabled={loading}
-              className="flex-1 py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
-              style={{boxShadow: loading ? "none" : "0 0 12px #38bdf855"}}
-            >
-              {loading ? "Generating..." : "Generate Map"}
-            </button>
-            {mapData && !loading && (
-              <button
-                type="button"
-                onClick={exportCSV}
-                className="py-2.5 px-3 rounded text-xs font-bold tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white transition-all"
-                title="Export to CSV"
-              >
-                ↓ CSV
-              </button>
-            )}          </div>
+          <button
+            type="button"
+            onClick={generate}
+            disabled={loading}
+            className="w-full py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
+            style={{boxShadow: loading ? "none" : "0 0 12px #38bdf855"}}
+          >
+            {loading ? "Generating..." : "Generate Map"}
+          </button>
         </div>
 
-        {/* Legend */}
         <div className="px-5 py-4 border-t border-slate-700/50 space-y-2">
           <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">Legend</div>
           {Object.entries(CATEGORY_STYLES).map(([k, s]) => (
@@ -549,7 +539,6 @@ ${form.jd.slice(0, 2000)}` }]
                 type="button"
                 onClick={exportCSV}
                 className="flex-shrink-0 py-2 px-3 rounded text-xs font-bold tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white transition-all"
-                title="Export to CSV"
               >
                 ↓ CSV
               </button>
