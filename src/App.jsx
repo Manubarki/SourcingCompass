@@ -463,10 +463,12 @@ ${form.jd.slice(0, 2000)}` }]
                   value={form.jd}
                   onChange={e => set("jd", e.target.value)}
                   onPaste={e => {
+                    e.stopPropagation();
                     const text = e.clipboardData.getData("text");
                     e.preventDefault();
                     set("jd", form.jd + text);
                   }}
+                  onClick={e => e.stopPropagation()}
                 />
                 <button
                   type="button"
