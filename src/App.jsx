@@ -256,7 +256,7 @@ function OutreachSection({ companies, form }) {
     try {
       const res = await fetch("/api/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:4000, messages:[{ role:"user", content:buildOutreachPrompt(company, form) }] })
+        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:4000, messages:[{ role:"user", content:buildOutreachPrompt(company, form) }] })
       });
       const data = await res.json();
       const raw = data.content?.map(b => b.text || "").join("").trim();
@@ -389,7 +389,6 @@ const TABS = [
   { id:"adjacent",  label:"Adjacent Pools",   dot:"#a78bfa" },
   { id:"wildcards", label:"Wildcard Bets",     dot:"#fb923c" },
   { id:"titles",    label:"Target Titles",     dot:"#34d399" },
-  { id:"outreach",  label:"Outreach",          dot:"#f97316" },
 ];
 
 function Tabs({ mapData, form }) {
@@ -409,7 +408,6 @@ function Tabs({ mapData, form }) {
       {active === "adjacent"  && <Section category="adjacent"  nodes={mapData.adjacent}/>}
       {active === "wildcards" && <Section category="wildcards" nodes={mapData.wildcards}/>}
       {active === "titles"    && <Section category="titles"    nodes={mapData.titles}/>}
-      {active === "outreach"  && <OutreachSection companies={mapData.companies} form={form}/>}
     </div>
   );
 }
@@ -488,7 +486,7 @@ export default function TalentMap() {
     try {
       const res = await fetch("/api/generate", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:4000, messages:[{ role:"user", content:buildPrompt(form) }] })
+        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:4000, messages:[{ role:"user", content:buildPrompt(form) }] })
       });
       const data = await res.json();
       if (!res.ok) { setError("API error " + res.status + ": " + JSON.stringify(data)); setLoading(false); return; }
@@ -598,10 +596,6 @@ export default function TalentMap() {
               <span className="text-[10px] text-slate-500">{s.label}</span>
             </div>
           ))}
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:"#f97316"}}/>
-            <span className="text-[10px] text-slate-500">Outreach Messages</span>
-          </div>
         </div>
       </div>
 
