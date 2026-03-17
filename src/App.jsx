@@ -20,7 +20,7 @@ const OUTREACH_EXAMPLE = [
   "",
   "The 4 messages must each take a DIFFERENT approach:",
   "Message 1 — Mission angle: Lead with Atlan mission and context layer vision. Connect their specific work at this company to the problem Atlan is solving.",
-  "Message 2 — Poachability angle: Acknowledge something specific about their company situation (growth stage, recent changes, tech evolution). Frame Atlan as the right next step given where they are.",
+      "Message 2 — Poachability angle: Use ONLY the real poachability signals provided below for this company. Reference the specific signal directly (e.g. if there were layoffs, mention the uncertainty; if equity is underwater, mention it). Do not invent or guess signals. Frame Atlan as the right next step given their specific situation.",
   "Message 3 — Technical challenge angle: Lead with a specific hard technical problem at Atlan (not the mission). Make it sound intellectually exciting. Connect to their tech background.",
   "Message 4 — Career ownership angle: Lead with scope and ownership. What they would own at Atlan, why it is rare. Do not mention mission — sell the role itself.",
   "",
@@ -406,7 +406,6 @@ const TABS = [
   { id:"wildcards", label:"Wildcard Bets",     dot:"#fb923c" },
   { id:"titles",    label:"Target Titles",     dot:"#34d399" },
   { id:"outreach",  label:"Outreach",          dot:"#f97316" },
-  { id:"xray",      label:"X-Ray Search",      dot:"#34d399" },
 ];
 
 function Tabs({ mapData, form }) {
@@ -427,7 +426,6 @@ function Tabs({ mapData, form }) {
       {active === "wildcards" && <Section category="wildcards" nodes={mapData.wildcards}/>}
       {active === "titles"    && <Section category="titles"    nodes={mapData.titles}/>}
       {active === "outreach"  && <OutreachSection companies={mapData.companies} form={form}/>}
-      {active === "xray"      && <XRaySection xraySearches={mapData.xraySearches}/>}
     </div>
   );
 }
@@ -619,10 +617,6 @@ export default function TalentMap() {
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:"#f97316"}}/>
             <span className="text-[10px] text-slate-500">Outreach Messages</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:"#34d399"}}/>
-            <span className="text-[10px] text-slate-500">X-Ray Searches</span>
           </div>
         </div>
       </div>
