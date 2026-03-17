@@ -454,8 +454,7 @@ export default function TalentMap() {
               >
                 ↓ CSV
               </button>
-            )}
-          </div>
+            )}          </div>
         </div>
 
         {/* Legend */}
@@ -492,10 +491,20 @@ export default function TalentMap() {
         )}
         {mapData && !loading && (
           <div className="relative z-10 p-8">
-            <div className="mb-8 pb-4 border-b border-slate-700/50">
-              <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
-              <div className="text-slate-500 text-xs mt-1">{[form.company, form.location].filter(Boolean).join(" · ")}</div>
-              <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover companies for LinkedIn search tips</div>
+            <div className="mb-8 pb-4 border-b border-slate-700/50 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
+                <div className="text-slate-500 text-xs mt-1">{[form.company, form.location].filter(Boolean).join(" · ")}</div>
+                <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover companies for LinkedIn search tips</div>
+              </div>
+              <button
+                type="button"
+                onClick={exportCSV}
+                className="flex-shrink-0 py-2 px-3 rounded text-xs font-bold tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white transition-all"
+                title="Export to CSV"
+              >
+                ↓ CSV
+              </button>
             </div>
             <Section category="companies" nodes={mapData.companies}/>
             <Section category="adjacent" nodes={mapData.adjacent}/>
