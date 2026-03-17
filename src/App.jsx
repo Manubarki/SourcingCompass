@@ -189,7 +189,36 @@ function NodeCard({ node, category }) {
   );
 }
 
-function Section({ category, nodes }) {
+function LoadingScreen() {
+  const [step, setStep] = useState(0);
+  const steps = ["Target Companies", "Adjacent Talent Pools", "Wildcard Bets", "Target Titles"];
+
+  useState(() => {
+    const interval = setInterval(() => {
+      setStep(s => (s + 1) % steps.length);
+    }, 800);
+    return () => clearInterval(interval);
+  });
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
+      <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin"/>
+      <div className="space-y-2 text-center">
+        {steps.map((s, i) => (
+          <div key={s} className={"flex items-center gap-2 transition-all duration-300 " + (i === step ? "opacity-100" : "opacity-20")}>
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{
+              background: ["#38bdf8","#a78bfa","#fb923c","#34d399"][i],
+              boxShadow: i === step ? "0 0 6px " + ["#38bdf8","#a78bfa","#fb923c","#34d399"][i] : "none"
+            }}/>
+            <span className={"text-xs tracking-widest uppercase font-mono " + (i === step ? ["text-sky-300","text-violet-300","text-orange-300","text-emerald-300"][i] : "text-slate-600")}>
+              {s}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
   const s = CATEGORY_STYLES[category];
   const descriptions = {
     companies:"Direct sourcing targets — companies where your ideal candidate likely works today",
@@ -486,7 +515,7 @@ export default function TalentMap() {
     try {
       const res = await fetch("/api/generate", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:4000, messages:[{ role:"user", content:buildPrompt(form) }] })
+        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:8000, messages:[{ role:"user", content:buildPrompt(form) }] })
       });
       const data = await res.json();
       if (!res.ok) { setError("API error " + res.status + ": " + JSON.stringify(data)); setLoading(false); return; }
@@ -608,12 +637,7 @@ export default function TalentMap() {
             <div className="text-slate-700 text-[10px] mt-2">AI-powered talent intelligence will populate here</div>
           </div>
         )}
-        {loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-            <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin"/>
-            <div className="text-sky-400 text-xs tracking-widest uppercase animate-pulse">Mapping talent landscape...</div>
-          </div>
-        )}
+        {loading && <LoadingScreen/>}
         {mapData && !loading && (
           <div className="relative z-10 p-8">
             <div className="mb-6 pb-4 border-b border-slate-700/50 flex items-start justify-between gap-4">
