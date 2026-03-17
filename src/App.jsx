@@ -323,7 +323,42 @@ function XRaySection({ xraySearches }) {
   );
 }
 
-function buildPrompt(form) {
+const TABS = [
+  { id:"companies", label:"Target Companies", dot:"#38bdf8" },
+  { id:"adjacent",  label:"Adjacent Pools",   dot:"#a78bfa" },
+  { id:"wildcards", label:"Wildcard Bets",     dot:"#fb923c" },
+  { id:"titles",    label:"Target Titles",     dot:"#34d399" },
+  { id:"outreach",  label:"Outreach",          dot:"#f97316" },
+  { id:"xray",      label:"X-Ray Search",      dot:"#34d399" },
+];
+
+function Tabs({ mapData }) {
+  const [active, setActive] = useState("companies");
+  return (
+    <div>
+      {/* Tab bar */}
+      <div className="flex flex-wrap gap-1 mb-6 border-b border-slate-700/50 pb-3">
+        {TABS.map(t => (
+          <button key={t.id} type="button" onClick={() => setActive(t.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-bold tracking-widest uppercase transition-all
+              ${active===t.id ? "bg-slate-700 text-slate-200" : "text-slate-500 hover:text-slate-300"}`}>
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background: active===t.id ? t.dot : "#475569", boxShadow: active===t.id ? `0 0 5px ${t.dot}` : "none"}}/>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {/* Tab content */}
+      {active === "companies" && <Section category="companies" nodes={mapData.companies}/>}
+      {active === "adjacent"  && <Section category="adjacent"  nodes={mapData.adjacent}/>}
+      {active === "wildcards" && <Section category="wildcards" nodes={mapData.wildcards}/>}
+      {active === "titles"    && <Section category="titles"    nodes={mapData.titles}/>}
+      {active === "outreach"  && <OutreachSection companies={mapData.companies}/>}
+      {active === "xray"      && <XRaySection xraySearches={mapData.xraySearches}/>}
+    </div>
+  );
+}
+
+
   return `You are a talent intelligence system for a company called Atlan. Return a structured talent map as JSON only — no markdown, no explanation, no backticks.
 
 ${ATLAN_CONTEXT}
@@ -566,23 +601,18 @@ Job Description: ${jdText.slice(0,2000)}` }] })
         )}
         {mapData && !loading && (
           <div className="relative z-10 p-8">
-            <div className="mb-8 pb-4 border-b border-slate-700/50 flex items-start justify-between gap-4">
+            <div className="mb-6 pb-4 border-b border-slate-700/50 flex items-start justify-between gap-4">
               <div>
                 <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
                 <div className="text-slate-500 text-xs mt-1">{[form.company,form.location].filter(Boolean).join(" · ")}</div>
-                <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes · outreach messages + x-ray searches below</div>
+                <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped</div>
               </div>
               <button type="button" onClick={exportCSV}
                 className="flex-shrink-0 py-2 px-3 rounded text-xs font-bold tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white transition-all">
                 ↓ CSV
               </button>
             </div>
-            <Section category="companies" nodes={mapData.companies}/>
-            <Section category="adjacent" nodes={mapData.adjacent}/>
-            <Section category="wildcards" nodes={mapData.wildcards}/>
-            <Section category="titles" nodes={mapData.titles}/>
-            <OutreachSection companies={mapData.companies}/>
-            <XRaySection xraySearches={mapData.xraySearches}/>
+            <Tabs mapData={mapData}/>
           </div>
         )}
       </div>
