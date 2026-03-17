@@ -287,7 +287,45 @@ export default function TalentMap() {
   const mapRef = useRef(null);
   const allNodes = mapData ? [...mapData.companies, ...mapData.adjacent, ...mapData.wildcards, ...mapData.titles] : [];
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [parsing, setParsing] = useState(false);
+
+  async function parseJD() {
+    if (!form.jd.trim()) return;
+    setParsing(true);
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 500,
+          messages: [{ role: "user", content: `Extract the following from this job description and return ONLY raw valid JSON, no markdown, no explanation:
+{
+  "role": "exact job title",
+  "seniority": "one of: Junior / Mid / Senior / Staff / Principal / Director / VP",
+  "skills": ["skill1", "skill2", "skill3"]
+}
+
+Job Description:
+${form.jd.slice(0, 2000)}` }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.map(b => b.text || "").join("").trim();
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      setForm(f => ({
+        ...f,
+        role: parsed.role || f.role,
+        seniority: parsed.seniority || f.seniority,
+        skills: parsed.skills?.length ? parsed.skills : f.skills,
+      }));
+      setShowJD(false);
+    } catch(e) {
+      setError(`JD parse error: ${e.message}`);
+    }
+    setParsing(false);
+  }
 
   async function generate() {
     if (!form.role.trim()) { setError("Role is required."); return; }
@@ -417,13 +455,23 @@ export default function TalentMap() {
               {showJD ? "▾ Hide" : "▸ Paste"} Job Description (optional)
             </button>
             {showJD && (
-              <textarea
-                rows={5}
-                className="w-full mt-2 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none transition-colors"
-                placeholder="Paste JD here — AI will extract skills and context automatically..."
-                value={form.jd}
-                onChange={e => set("jd", e.target.value)}
-              />
+              <div className="mt-2 space-y-2">
+                <textarea
+                  rows={5}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none transition-colors"
+                  placeholder="Paste JD here — click Parse JD to auto-fill role, seniority and skills..."
+                  value={form.jd}
+                  onChange={e => set("jd", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={parseJD}
+                  disabled={parsing || !form.jd.trim()}
+                  className="w-full py-2 rounded text-xs font-bold tracking-widest uppercase bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40 transition-all"
+                >
+                  {parsing ? "Parsing..." : "⚡ Parse JD — Auto-fill Fields"}
+                </button>
+              </div>
             )}
           </div>
 
