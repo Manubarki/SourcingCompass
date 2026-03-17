@@ -218,17 +218,65 @@ function Section({ category, nodes }) {
   );
 }
 
-function OutreachSection({ companies }) {
-  const [activeCompany, setActiveCompany] = useState(0);
-  const [copied, setCopied] = useState(null);
-  const company = companies[activeCompany];
-  if (!company?.outreachMessages?.length) return null;
+function buildOutreachPrompt(company, form) {
+  return [
+    "You are a talent sourcing assistant for Atlan. Generate 6 outreach messages for a candidate at " + company.label + ".",
+    "",
+    ATLAN_CONTEXT,
+    "",
+    OUTREACH_EXAMPLE,
+    "",
+    "Role we are hiring: " + form.role,
+    "Seniority: " + form.seniority,
+    "Skills: " + form.skills.join(", "),
+    "Target company: " + company.label,
+    "Why relevant: " + (company.whyRelevant || company.sub || ""),
+    "Poachability signals: " + (company.poachabilitySignals || []).join(", "),
+    "Likely profile: " + (company.likelyProfile || ""),
+    "",
+    "Return ONLY this raw valid JSON, no markdown, no backticks:",
+    '[{"channel":"LinkedIn InMail","angle":"Context Layer","message":"full message here"},{"channel":"LinkedIn DM","angle":"Poachability Signal","message":"full message here"},{"channel":"Email","angle":"Career Growth","message":"full message here"},{"channel":"Email","angle":"Tech Stack","message":"full message here"},{"channel":"Referral","angle":"Network Ask","message":"full message here"},{"channel":"Cold Intro","angle":"Mission/Vision","message":"full message here"}]',
+    "",
+    "Rules:",
+    "- All 6 messages must follow the Atlan style from the example",
+    "- Specific to " + company.label + " and the " + form.role + " role",
+    "- Use [placeholders] for name, specific skill, specific area",
+    "- Under 150 words each",
+    "- End every message with: Open to a quick chat?",
+    "- Return ONLY the JSON array, nothing else",
+  ].join("\n");
+}
 
-  function copy(text, idx) {
+function OutreachSection({ companies, form }) {
+  const [activeCompany, setActiveCompany] = useState(0);
+  const [outreachMap, setOutreachMap] = useState({});
+  const [loadingIdx, setLoadingIdx] = useState(null);
+  const [copied, setCopied] = useState(null);
+  const [error, setError] = useState("");
+
+  async function generateOutreach(company, idx) {
+    setLoadingIdx(idx); setError("");
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:4000, messages:[{ role:"user", content:buildOutreachPrompt(company, form) }] })
+      });
+      const data = await res.json();
+      const raw = data.content?.map(b => b.text || "").join("").trim();
+      const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
+      setOutreachMap(prev => ({ ...prev, [company.id]: parsed }));
+    } catch(e) { setError("Failed to generate: " + e.message); }
+    setLoadingIdx(null);
+  }
+
+  function copy(text, key) {
     navigator.clipboard.writeText(text);
-    setCopied(idx);
+    setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   }
+
+  const company = companies[activeCompany];
+  const messages = outreachMap[company?.id];
 
   return (
     <div className="mb-8">
@@ -237,32 +285,60 @@ function OutreachSection({ companies }) {
         <span className="text-xs font-bold tracking-[0.2em] uppercase text-orange-300">Outreach Messages</span>
         <div className="flex-1 border-t border-dashed border-orange-900/60"/>
       </div>
-      <div className="text-[10px] text-slate-600 ml-4 mb-4">Channel + angle combinations — click copy, fill in [placeholders] before sending</div>
+      <div className="text-[10px] text-slate-600 ml-4 mb-4">Select a company and generate tailored messages — fill [placeholders] before sending</div>
+
+      {/* Company tabs */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {companies.map((c, i) => (
           <button key={i} type="button" onClick={() => setActiveCompany(i)}
-            className={"text-[10px] px-2.5 py-1 rounded border font-mono transition-all " + (i === activeCompany ? "bg-orange-500/20 border-orange-500 text-orange-300" : "bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400")}>
+            className={"text-[10px] px-2.5 py-1 rounded border font-mono transition-all flex items-center gap-1.5 " + (i === activeCompany ? "bg-orange-500/20 border-orange-500 text-orange-300" : "bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400")}>
             {c.label}
+            {outreachMap[c.id] && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"/>}
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        {company.outreachMessages.map((msg, i) => (
-          <div key={i} className="bg-slate-900 border border-slate-700 rounded-lg p-3 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={"text-[9px] px-2 py-0.5 rounded border font-mono font-bold " + (CHANNEL_STYLES[msg.channel] || "bg-slate-800 border-slate-600 text-slate-400")}>{msg.channel}</span>
-                <span className="text-[9px] text-slate-500 tracking-widest uppercase">{msg.angle}</span>
-              </div>
-              <button type="button" onClick={() => copy(msg.message, i)}
-                className="text-[9px] text-slate-500 hover:text-sky-400 transition-colors px-1.5 py-0.5 border border-slate-700 rounded hover:border-sky-700">
-                {copied === i ? "Copied" : "Copy"}
-              </button>
-            </div>
-            <div className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap">{msg.message}</div>
+
+      {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2 mb-4">{error}</div>}
+
+      {!messages ? (
+        <div className="border border-slate-700/50 border-dashed rounded-lg p-8 text-center">
+          <div className="text-slate-500 text-xs mb-4">No outreach messages generated yet for <span className="text-slate-300">{company?.label}</span></div>
+          <button type="button"
+            onClick={() => generateOutreach(company, activeCompany)}
+            disabled={loadingIdx === activeCompany}
+            className="px-4 py-2 rounded text-xs font-bold tracking-widest uppercase bg-orange-500 hover:bg-orange-400 text-white disabled:opacity-40 transition-all">
+            {loadingIdx === activeCompany ? "Generating..." : "Generate Outreach Messages"}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div className="flex justify-end mb-3">
+            <button type="button"
+              onClick={() => generateOutreach(company, activeCompany)}
+              disabled={loadingIdx === activeCompany}
+              className="text-[10px] px-2.5 py-1 rounded border border-slate-600 text-slate-500 hover:text-orange-400 hover:border-orange-700 transition-all">
+              {loadingIdx === activeCompany ? "Regenerating..." : "Regenerate"}
+            </button>
           </div>
-        ))}
-      </div>
+          <div className="grid grid-cols-2 gap-3">
+            {messages.map((msg, i) => (
+              <div key={i} className="bg-slate-900 border border-slate-700 rounded-lg p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={"text-[9px] px-2 py-0.5 rounded border font-mono font-bold " + (CHANNEL_STYLES[msg.channel] || "bg-slate-800 border-slate-600 text-slate-400")}>{msg.channel}</span>
+                    <span className="text-[9px] text-slate-500 tracking-widest uppercase">{msg.angle}</span>
+                  </div>
+                  <button type="button" onClick={() => copy(msg.message, i + "-" + activeCompany)}
+                    className="text-[9px] text-slate-500 hover:text-sky-400 transition-colors px-1.5 py-0.5 border border-slate-700 rounded hover:border-sky-700">
+                    {copied === i + "-" + activeCompany ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <div className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap">{msg.message}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -319,7 +395,7 @@ const TABS = [
   { id:"xray",      label:"X-Ray Search",      dot:"#34d399" },
 ];
 
-function Tabs({ mapData }) {
+function Tabs({ mapData, form }) {
   const [active, setActive] = useState("companies");
   return (
     <div>
@@ -336,7 +412,7 @@ function Tabs({ mapData }) {
       {active === "adjacent"  && <Section category="adjacent"  nodes={mapData.adjacent}/>}
       {active === "wildcards" && <Section category="wildcards" nodes={mapData.wildcards}/>}
       {active === "titles"    && <Section category="titles"    nodes={mapData.titles}/>}
-      {active === "outreach"  && <OutreachSection companies={mapData.companies}/>}
+      {active === "outreach"  && <OutreachSection companies={mapData.companies} form={form}/>}
       {active === "xray"      && <XRaySection xraySearches={mapData.xraySearches}/>}
     </div>
   );
@@ -359,7 +435,7 @@ function buildPrompt(form) {
     "Exclusions: " + (form.exclusions.join(", ") || "None"),
     "",
     "Return this JSON (replace all placeholder values with real content):",
-    '{"companies":[{"id":"c1","label":"Company Name","sub":"Industry · Size","tags":["tag1"],"connections":[],"confidence":85,"stage":"Series B","talentDensity":78,"poachability":65,"likelyProfile":"One sentence.","poachabilitySignals":["[Signal] reason","[Confirmed] reason"],"whyRelevant":"1-2 sentences.","searchTitles":["Title 1","Title 2"],"outreachMessages":[{"channel":"LinkedIn InMail","angle":"Context Layer","message":"full message"},{"channel":"LinkedIn DM","angle":"Poachability Signal","message":"full message"},{"channel":"Email","angle":"Career Growth","message":"full message"},{"channel":"Email","angle":"Tech Stack","message":"full message"},{"channel":"Referral","angle":"Network Ask","message":"full message"},{"channel":"Cold Intro","angle":"Mission/Vision","message":"full message"}]}],"adjacent":[{"id":"a1","label":"Company Name","sub":"Why transferable","tags":["tag1"],"connections":[]}],"wildcards":[{"id":"w1","label":"Company Name","sub":"Non-obvious reason","tags":["overlap"],"connections":[]}],"titles":[{"id":"t1","label":"Exact Job Title","sub":"Companies using this title","tags":["variant"],"connections":[],"confidence":90}],"xraySearches":[{"label":"Target title at top companies","query":"site:linkedin.com/in intitle:Title (Company1 OR Company2)"},{"label":"Skills + seniority","query":"site:linkedin.com/in skill1 skill2 seniority"},{"label":"Title variants","query":"site:linkedin.com/in intitle:(Title1 OR Title2) Company"},{"label":"Location filter","query":"site:linkedin.com/in intitle:Title location skill"},{"label":"Adjacent pool","query":"site:linkedin.com/in intitle:Title (Adjacent1 OR Adjacent2) skill"}]}',
+    '{"companies":[{"id":"c1","label":"Company Name","sub":"Industry · Size","tags":["tag1"],"connections":[],"confidence":85,"stage":"Series B","talentDensity":78,"poachability":65,"likelyProfile":"One sentence.","poachabilitySignals":["[Signal] reason","[Confirmed] reason"],"whyRelevant":"1-2 sentences.","searchTitles":["Title 1","Title 2"]}],"adjacent":[{"id":"a1","label":"Company Name","sub":"Why transferable","tags":["tag1"],"connections":[]}],"wildcards":[{"id":"w1","label":"Company Name","sub":"Non-obvious reason","tags":["overlap"],"connections":[]}],"titles":[{"id":"t1","label":"Exact Job Title","sub":"Companies using this title","tags":["variant"],"connections":[],"confidence":90}],"xraySearches":[{"label":"Target title at top companies","query":"site:linkedin.com/in intitle:Title (Company1 OR Company2)"},{"label":"Skills + seniority","query":"site:linkedin.com/in skill1 skill2 seniority"},{"label":"Title variants","query":"site:linkedin.com/in intitle:(Title1 OR Title2) Company"},{"label":"Location filter","query":"site:linkedin.com/in intitle:Title location skill"},{"label":"Adjacent pool","query":"site:linkedin.com/in intitle:Title (Adjacent1 OR Adjacent2) skill"}]}',
     "",
     "Rules:",
     "- 6-8 companies, mix of established and 3-4 startups",
@@ -416,7 +492,7 @@ export default function TalentMap() {
     try {
       const res = await fetch("/api/generate", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:8000, messages:[{ role:"user", content:buildPrompt(form) }] })
+        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:4000, messages:[{ role:"user", content:buildPrompt(form) }] })
       });
       const data = await res.json();
       if (!res.ok) { setError("API error " + res.status + ": " + JSON.stringify(data)); setLoading(false); return; }
@@ -565,7 +641,7 @@ export default function TalentMap() {
                 CSV
               </button>
             </div>
-            <Tabs mapData={mapData}/>
+            <Tabs mapData={mapData} form={form}/>
           </div>
         )}
       </div>
