@@ -19,41 +19,6 @@ function BlueprintGrid() {
   );
 }
 
-function LaserLines({ nodes, activeNode, containerRef }) {
-  const [lines, setLines] = useState([]);
-  useEffect(() => {
-    if (!activeNode || !containerRef.current) { setLines([]); return; }
-    const container = containerRef.current.getBoundingClientRect();
-    const sourceEl = document.getElementById(`node-${activeNode.id}`);
-    if (!sourceEl) return;
-    const src = sourceEl.getBoundingClientRect();
-    const sx = src.left - container.left + src.width / 2;
-    const sy = src.top - container.top + src.height / 2;
-    const newLines = nodes
-      .filter(n => n.id !== activeNode.id && activeNode.connections?.includes(n.id))
-      .map(n => {
-        const el = document.getElementById(`node-${n.id}`);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { x1: sx, y1: sy, x2: r.left - container.left + r.width/2, y2: r.top - container.top + r.height/2, id: n.id };
-      }).filter(Boolean);
-    setLines(newLines);
-  }, [activeNode, nodes, containerRef]);
-  if (!lines.length) return null;
-  return (
-    <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{zIndex:10}}>
-      {lines.map(l => (
-        <g key={l.id}>
-          <line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#f97316" strokeWidth="1.5" strokeDasharray="6 3" opacity="0.9">
-            <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="0.4s" repeatCount="indefinite"/>
-          </line>
-          <circle cx={l.x2} cy={l.y2} r="4" fill="#f97316" opacity="0.8"/>
-        </g>
-      ))}
-    </svg>
-  );
-}
-
 const CATEGORY_STYLES = {
   companies:{ bg:"bg-sky-900/80", border:"border-sky-400", text:"text-sky-300", badge:"bg-sky-400/20 text-sky-300", dot:"#38bdf8" },
   adjacent: { bg:"bg-violet-900/80", border:"border-violet-400", text:"text-violet-300", badge:"bg-violet-400/20 text-violet-300", dot:"#a78bfa" },
@@ -133,7 +98,7 @@ function CompanyScores({ node }) {
       )}
       {node.poachabilitySignals?.length > 0 && (
         <div className="mt-2 pt-2 border-t border-yellow-900/40">
-          <div className="text-[9px] text-yellow-600 tracking-widests uppercase mb-1">Poachability Signals</div>
+          <div className="text-[9px] text-yellow-600 tracking-widest uppercase mb-1">Poachability Signals</div>
           {node.poachabilitySignals.map((s, i) => (
             <div key={i} className="flex gap-1.5 mt-1">
               <span className="text-yellow-600 text-[9px] mt-0.5 flex-shrink-0">•</span>
@@ -146,15 +111,44 @@ function CompanyScores({ node }) {
   );
 }
 
-function NodeCard({ node, category, onHover, isActive }) {
+function HoverTooltip({ node, visible }) {
+  if (!visible || (!node.whyRelevant && !node.searchTitles?.length)) return null;
+  return (
+    <div className="absolute left-0 right-0 -bottom-1 translate-y-full z-50 pointer-events-none"
+      style={{filter:"drop-shadow(0 4px 12px rgba(0,0,0,0.5))"}}>
+      <div className="bg-slate-800 border border-sky-500/40 rounded mt-1 p-3 text-left">
+        {node.whyRelevant && (
+          <div className="mb-2">
+            <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Why relevant</div>
+            <div className="text-[11px] text-slate-300 leading-relaxed">{node.whyRelevant}</div>
+          </div>
+        )}
+        {node.searchTitles?.length > 0 && (
+          <div>
+            <div className="text-[9px] text-sky-400 tracking-widests uppercase mb-1">Search on LinkedIn</div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {node.searchTitles.map((t, i) => (
+                <span key={i} className="text-[10px] bg-sky-900/60 border border-sky-700/60 text-sky-300 px-1.5 py-0.5 rounded font-mono">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NodeCard({ node, category }) {
+  const [hovered, setHovered] = useState(false);
   const s = CATEGORY_STYLES[category];
+  const hasTooltip = category === "companies" && (node.whyRelevant || node.searchTitles?.length > 0);
   return (
     <div
       id={`node-${node.id}`}
-      onMouseEnter={() => onHover(node)}
-      onMouseLeave={() => onHover(null)}
-      className={`relative rounded border ${s.bg} ${s.border} p-3 cursor-pointer transition-all duration-200 select-none ${isActive ? "shadow-lg scale-105 z-20" : "hover:shadow-md"}`}
-      style={{ boxShadow: isActive ? `0 0 16px 2px ${s.dot}55` : undefined }}
+      className={`relative rounded border ${s.bg} ${s.border} p-3 transition-all duration-200 select-none ${hovered ? "shadow-lg z-20" : "hover:shadow-md"}`}
+      style={{ boxShadow: hovered ? `0 0 16px 2px ${s.dot}55` : undefined }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <div className="flex items-start justify-between gap-1 mb-1">
         <div className={`text-xs font-bold tracking-widest uppercase ${s.text}`}>{node.label}</div>
@@ -178,14 +172,17 @@ function NodeCard({ node, category, onHover, isActive }) {
           <ScoreBar label="Match Confidence" value={node.confidence} color={node.confidence >= 80 ? "#34d399" : node.confidence >= 60 ? "#facc15" : "#f87171"}/>
         </div>
       )}
-      {node.connections?.length > 0 && (
-        <div className="absolute bottom-1.5 right-2 text-[9px] text-slate-500 font-mono">{node.connections.length} links</div>
+      {hasTooltip && <HoverTooltip node={node} visible={hovered}/>}
+      {hasTooltip && (
+        <div className="mt-2 pt-2 border-t border-slate-700/30">
+          <div className="text-[9px] text-slate-600 tracking-widest">hover for linkedin tips →</div>
+        </div>
       )}
     </div>
   );
 }
 
-function Section({ title, category, nodes, onHover, activeNode }) {
+function Section({ title, category, nodes }) {
   const s = CATEGORY_STYLES[category];
   return (
     <div className="mb-8">
@@ -197,7 +194,7 @@ function Section({ title, category, nodes, onHover, activeNode }) {
       </div>
       <div className="grid grid-cols-2 gap-2">
         {nodes.map(n => (
-          <NodeCard key={n.id} node={n} category={category} onHover={onHover} isActive={activeNode?.id === n.id}/>
+          <NodeCard key={n.id} node={n} category={category}/>
         ))}
       </div>
     </div>
@@ -222,26 +219,30 @@ Return this exact JSON structure:
     "label": "Company Name",
     "sub": "Industry · Size",
     "tags": ["tag1", "tag2"],
-    "connections": ["w1"],
+    "connections": [],
     "confidence": 85,
     "stage": "Series B",
     "talentDensity": 78,
     "poachability": 65,
     "likelyProfile": "One sentence describing the typical engineer background.",
-    "poachabilitySignals": ["[Signal] First reason", "[Confirmed] Second reason"]
+    "poachabilitySignals": ["[Signal] First reason", "[Confirmed] Second reason"],
+    "whyRelevant": "One or two sentences explaining exactly why this company is a good source for this specific role.",
+    "searchTitles": ["Exact Title 1", "Exact Title 2", "Exact Title 3"]
   }],
-  "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["tag1"], "connections": ["c1"] }],
-  "wildcards": [{ "id": "w1", "label": "Real Company Name", "sub": "Specific reason why their engineers are a surprising but valid match", "tags": ["overlap"], "connections": ["c1", "a1"] }],
-  "titles": [{ "id": "t1", "label": "Job Title", "sub": "Common at these orgs", "tags": ["variant"], "connections": [], "confidence": 90 }]
+  "adjacent": [{ "id": "a1", "label": "Company Name", "sub": "Why their talent is transferable", "tags": ["tag1"], "connections": [] }],
+  "wildcards": [{ "id": "w1", "label": "Real Company Name", "sub": "Specific reason why their engineers are a surprising but valid match", "tags": ["overlap"], "connections": [] }],
+  "titles": [{ "id": "t1", "label": "Exact Job Title", "sub": "Which companies commonly use this title", "tags": ["variant"], "connections": [], "confidence": 90 }]
 }
 
 Rules:
 - 6-8 companies (mix of established AND 3-4 notable startups)
-- CRITICAL: Only include real companies that actually exist. Do NOT invent or combine company names.
 - NEVER include "${form.company}" in target companies
+- CRITICAL: Only include real companies that actually exist. Do NOT invent or combine company names.
 - adjacent = 4-5 specific COMPANIES (not job titles) whose engineers have transferable skills
-- wildcards = 3-4 unconventional companies with surprising talent overlap
-- titles = 5-7 target job titles
+- wildcards = 3-4 unconventional REAL companies that actually exist, with a specific non-obvious reason
+- titles = 5-7 EXACT job titles as they appear on real job postings
+- whyRelevant = 1-2 sentences explaining why THIS company specifically is relevant to THIS role
+- searchTitles = 2-3 exact LinkedIn search titles that work best at this specific company
 - confidence = relevance 0-100
 - talentDensity = concentration of relevant engineers 0-100
 - poachability = likelihood to move 0-100
@@ -260,7 +261,6 @@ export default function TalentMap() {
   });
   const [mapData, setMapData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [activeNode, setActiveNode] = useState(null);
   const [error, setError] = useState("");
   const [generated, setGenerated] = useState(false);
   const mapRef = useRef(null);
@@ -296,7 +296,6 @@ export default function TalentMap() {
 
   return (
     <div className="flex h-screen bg-slate-950 font-mono overflow-hidden">
-      {/* LEFT PANEL */}
       <div className="w-[30%] min-w-[260px] border-r border-slate-700/60 flex flex-col bg-slate-900/90 z-10">
         <div className="px-5 pt-5 pb-4 border-b border-slate-700/50">
           <div className="flex items-center gap-2 mb-1">
@@ -305,7 +304,6 @@ export default function TalentMap() {
           </div>
           <div className="text-[10px] text-slate-500 tracking-wider">Talent Intelligence System</div>
         </div>
-
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="flex gap-2">
             <div className="flex-1">
@@ -319,7 +317,6 @@ export default function TalentMap() {
                 placeholder="e.g. Atlan" value={form.company} onChange={e => set("company", e.target.value)}/>
             </div>
           </div>
-
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Location</label>
@@ -335,31 +332,25 @@ export default function TalentMap() {
               </select>
             </div>
           </div>
-
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Must-Have Skills</label>
             <TagInput placeholder="Type a skill, press , or Enter" tags={form.skills} onChange={v => set("skills", v)}/>
           </div>
-
           <div>
             <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Preferred Industries</label>
             <TagInput placeholder="e.g. Fintech, Data → press , or Enter" tags={form.industries} onChange={v => set("industries", v)}/>
           </div>
-
           <div>
-            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Exclusions</label>
+            <label className="block text-[10px] text-slate-400 tracking-widests uppercase mb-1">Exclusions</label>
             <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v => set("exclusions", v)}/>
           </div>
-
           {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
-
           <button onClick={generate} disabled={loading}
             className="w-full py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50 transition-all"
             style={{boxShadow: loading ? "none" : "0 0 12px #38bdf855"}}>
             {loading ? "Generating..." : "Generate Map"}
           </button>
         </div>
-
         <div className="px-5 py-4 border-t border-slate-700/50 space-y-2">
           <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-2">Legend</div>
           {Object.entries(CATEGORY_STYLES).map(([k, s]) => (
@@ -371,16 +362,14 @@ export default function TalentMap() {
             </div>
           ))}
           <div className="flex items-center gap-2 pt-1">
-            <div className="w-4 border-t border-dashed border-orange-400"/>
-            <span className="text-[10px] text-slate-500">Hover = laser links</span>
+            <div className="w-4 border-t border-dashed border-sky-400"/>
+            <span className="text-[10px] text-slate-500">Hover companies for LinkedIn tips</span>
           </div>
         </div>
       </div>
 
-      {/* RIGHT MAP */}
       <div className="flex-1 relative overflow-y-auto" ref={mapRef}>
         <BlueprintGrid/>
-        <LaserLines nodes={allNodes} activeNode={activeNode} containerRef={mapRef}/>
         {!generated && !loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
             <div className="text-slate-700 text-4xl mb-4">⊕</div>
@@ -399,12 +388,12 @@ export default function TalentMap() {
             <div className="mb-8 pb-4 border-b border-slate-700/50">
               <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
               <div className="text-slate-500 text-xs mt-1">{[form.company, form.location].filter(Boolean).join(" · ")}</div>
-              <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover to reveal connections</div>
+              <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped · hover companies for LinkedIn search tips</div>
             </div>
-            <Section title="Target Companies" category="companies" nodes={mapData.companies} onHover={setActiveNode} activeNode={activeNode}/>
-            <Section title="Adjacent Talent Pools" category="adjacent" nodes={mapData.adjacent} onHover={setActiveNode} activeNode={activeNode}/>
-            <Section title="Wildcard Bets" category="wildcards" nodes={mapData.wildcards} onHover={setActiveNode} activeNode={activeNode}/>
-            <Section title="Target Titles" category="titles" nodes={mapData.titles} onHover={setActiveNode} activeNode={activeNode}/>
+            <Section title="Target Companies" category="companies" nodes={mapData.companies}/>
+            <Section title="Adjacent Talent Pools" category="adjacent" nodes={mapData.adjacent}/>
+            <Section title="Wildcard Bets" category="wildcards" nodes={mapData.wildcards}/>
+            <Section title="Target Titles" category="titles" nodes={mapData.titles}/>
           </div>
         )}
       </div>
