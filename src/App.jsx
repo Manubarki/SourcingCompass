@@ -13,9 +13,23 @@ const ATLAN_CONTEXT = [
 ].join(" ");
 
 const OUTREACH_EXAMPLE = [
-  "OUTREACH STYLE GUIDE — follow this exactly:",
-  "Example message: I hope you are doing well. I am reaching out from Atlan. Our mission is to become the context layer for the AI world — building the foundational primitives that will power the next generation of apps and agents. One of the core bets is our data platform: Building a control plane that transforms existing lakehouse architectures into AI-ready context stores with governance, multimodal capabilities (structured, unstructured, vector, graph), and extensibility. Your background as a [title], with experience in [specific area], aligns well with our needs. We are looking for someone to take deep ownership of [responsibility] — end-to-end, high impact. Your expertise in [skill1] and [skill2] would be invaluable to our team. We are also intentionally AI-native in how we design and ship systems, using modern AI tools for real engineering leverage while owning outcomes fully. Open to a quick chat?",
-  "Rules: Open with that greeting. State Atlan mission. Connect to their specific company and work. Reference their title and 2-3 skills with [placeholders]. State what they would own at Atlan. Mention AI-native culture. End with: Open to a quick chat? Keep under 150 words. No fluff.",
+  "OUTREACH STYLE GUIDE — generate 4 LinkedIn InMail messages, each with a genuinely different angle and tone. Do NOT repeat the same structure with different skill words.",
+  "",
+  "Example of the base Atlan style (use this as the voice/tone reference):",
+  "I hope you are doing well. I am reaching out from Atlan. Our mission is to become the context layer for the AI world — building the foundational primitives that will power the next generation of apps and agents. One of the core bets is our data platform: Building a control plane that transforms existing lakehouse architectures into AI-ready context stores with governance, multimodal capabilities, and extensibility. Your background as a [title], with experience in [specific area], aligns well with our needs. We are looking for someone to take deep ownership of [responsibility] — end-to-end, high impact. Your expertise in [skill1] and [skill2] would be invaluable to our team. We are also intentionally AI-native in how we design and ship systems. Open to a quick chat?",
+  "",
+  "The 4 messages must each take a DIFFERENT approach:",
+  "Message 1 — Mission angle: Lead with Atlan mission and context layer vision. Connect their specific work at this company to the problem Atlan is solving.",
+  "Message 2 — Poachability angle: Acknowledge something specific about their company situation (growth stage, recent changes, tech evolution). Frame Atlan as the right next step given where they are.",
+  "Message 3 — Technical challenge angle: Lead with a specific hard technical problem at Atlan (not the mission). Make it sound intellectually exciting. Connect to their tech background.",
+  "Message 4 — Career ownership angle: Lead with scope and ownership. What they would own at Atlan, why it is rare. Do not mention mission — sell the role itself.",
+  "",
+  "Rules for all 4:",
+  "- Channel is always LinkedIn InMail",
+  "- Use [placeholders] for name, specific skill, specific area of their work",
+  "- Under 120 words each",
+  "- End every message with: Open to a quick chat?",
+  "- No fluff, no generic praise, no repeating the same structure",
 ].join("\n");
 
 function BlueprintGrid() {
@@ -445,7 +459,7 @@ function buildPrompt(form) {
     "- wildcards = 3-4 unconventional real companies with specific non-obvious reasons",
     "- titles = 5-7 exact job titles as on real postings",
     "- outreachMessages = 6 messages in Atlan style, specific to that company, [placeholders], under 150 words, ends with: Open to a quick chat?",
-    "- xraySearches = 5 real Google dork strings for this role and these companies",
+    "- xraySearches = 5 Google dork strings. ONLY use real Google operators: site:linkedin.com/in, intitle:, inurl:, intext:, \"quoted strings\", OR, -minus. Do NOT use fake operators like skill:, company:, seniority:, location: — these do not exist in Google.",
     "- confidence/talentDensity/poachability = 0-100",
     "- poachabilitySignals = 2-3 strings prefixed [Signal] or [Confirmed]",
     "- stage = Public / Late Stage / Series C+ / Series B / Series A / Seed / Enterprise",
