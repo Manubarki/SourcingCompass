@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
     const companies = await getMemory();
     const companyList = companies.length > 0
-      ? "\n\nCOMPANY LIST — only suggest companies from this verified list:\n" + getRelevant(companies, role, skills, industries)
+      ? "\n\nVERIFIED COMPANY LIST — you MUST ONLY suggest companies from this list. Do NOT invent company names, community groups, open source projects, or contributor pools. If a company is not in this list, do not suggest it:\n" + getRelevant(companies, role, skills, industries)
       : "";
 
     const finalPrompt = prompt + companyList;
