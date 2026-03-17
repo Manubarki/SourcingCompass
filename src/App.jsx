@@ -153,30 +153,13 @@ function CompanyScores({ node }) {
 }
 
 function HoverTooltip({ node, visible }) {
-  if (!node.whyRelevant && !node.searchTitles?.length) return null;
+  if (!node.whyRelevant) return null;
   return (
     <div className="absolute top-0 left-full z-50 pl-2 pointer-events-none"
       style={{ width:"240px", opacity:visible?1:0, transform:visible?"translateX(0)":"translateX(-12px)", transition:"opacity 0.25s ease, transform 0.25s ease" }}>
       <div className="bg-slate-800 border border-sky-500/40 rounded-lg p-3 shadow-xl" style={{borderLeft:"3px solid #38bdf8"}}>
-        {node.whyRelevant && (
-          <div className="mb-2">
-            <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Why relevant</div>
-            <div className="text-[11px] text-slate-300 leading-relaxed">{node.whyRelevant}</div>
-          </div>
-        )}
-        {node.searchTitles && node.searchTitles.length > 0 && (
-          <div>
-            <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Quick LinkedIn search</div>
-            <div className="flex flex-col gap-1 mt-1" style={{pointerEvents:"all"}}>
-              {node.searchTitles.map((t, i) => (
-                <span key={i}
-                  className="text-[10px] bg-sky-900/60 border border-sky-700/60 text-sky-300 px-1.5 py-0.5 rounded font-mono cursor-pointer hover:bg-sky-800/60"
-                  onClick={() => window.open("https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(t), "_blank")}
-                >{t} -&gt;</span>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Why relevant</div>
+        <div className="text-[11px] text-slate-300 leading-relaxed">{node.whyRelevant}</div>
       </div>
     </div>
   );
@@ -185,7 +168,7 @@ function HoverTooltip({ node, visible }) {
 function NodeCard({ node, category }) {
   const [hovered, setHovered] = useState(false);
   const s = CATEGORY_STYLES[category];
-  const hasTooltip = category === "companies" && (node.whyRelevant || node.searchTitles?.length > 0);
+  const hasTooltip = category === "companies" && node.whyRelevant;
   return (
     <div id={"node-" + node.id}
       className={"relative rounded border " + s.bg + " " + s.border + " p-3 transition-all duration-200 select-none overflow-visible " + (hovered ? "shadow-lg z-20" : "hover:shadow-md")}
