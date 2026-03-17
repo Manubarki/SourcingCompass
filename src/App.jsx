@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const GRID_SIZE = 40;
 
@@ -192,13 +192,13 @@ function NodeCard({ node, category }) {
 function LoadingScreen() {
   const [step, setStep] = useState(0);
   const steps = ["Target Companies", "Adjacent Talent Pools", "Wildcard Bets", "Target Titles"];
+  const colors = ["#38bdf8","#a78bfa","#fb923c","#34d399"];
+  const textColors = ["text-sky-300","text-violet-300","text-orange-300","text-emerald-300"];
 
-  useState(() => {
-    const interval = setInterval(() => {
-      setStep(s => (s + 1) % steps.length);
-    }, 800);
+  useEffect(() => {
+    const interval = setInterval(() => setStep(s => (s + 1) % steps.length), 800);
     return () => clearInterval(interval);
-  });
+  }, []);
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
@@ -206,13 +206,8 @@ function LoadingScreen() {
       <div className="space-y-2 text-center">
         {steps.map((s, i) => (
           <div key={s} className={"flex items-center gap-2 transition-all duration-300 " + (i === step ? "opacity-100" : "opacity-20")}>
-            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{
-              background: ["#38bdf8","#a78bfa","#fb923c","#34d399"][i],
-              boxShadow: i === step ? "0 0 6px " + ["#38bdf8","#a78bfa","#fb923c","#34d399"][i] : "none"
-            }}/>
-            <span className={"text-xs tracking-widest uppercase font-mono " + (i === step ? ["text-sky-300","text-violet-300","text-orange-300","text-emerald-300"][i] : "text-slate-600")}>
-              {s}
-            </span>
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background: colors[i], boxShadow: i === step ? "0 0 6px " + colors[i] : "none"}}/>
+            <span className={"text-xs tracking-widest uppercase font-mono " + (i === step ? textColors[i] : "text-slate-600")}>{s}</span>
           </div>
         ))}
       </div>
