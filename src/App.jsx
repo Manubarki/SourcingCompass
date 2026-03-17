@@ -20,7 +20,7 @@ const OUTREACH_EXAMPLE = [
   "",
   "The 4 messages must each take a DIFFERENT approach:",
   "Message 1 — Mission angle: Lead with Atlan mission and context layer vision. Connect their specific work at this company to the problem Atlan is solving.",
-      "Message 2 — Poachability angle: Use ONLY the real poachability signals provided below for this company. Reference the specific signal directly (e.g. if there were layoffs, mention the uncertainty; if equity is underwater, mention it). Do not invent or guess signals. Frame Atlan as the right next step given their specific situation.",
+      "Message 2 — Poachability angle (short, casual LinkedIn DM, NOT InMail): Use ONLY the real poachability signals provided below for this company. Reference the specific signal directly. Keep it under 50 words, casual tone, no mission statement. Frame Atlan as the right next step given their specific situation.",
   "Message 3 — Technical challenge angle: Lead with a specific hard technical problem at Atlan (not the mission). Make it sound intellectually exciting. Connect to their tech background.",
   "Message 4 — Career ownership angle: Lead with scope and ownership. What they would own at Atlan, why it is rare. Do not mention mission — sell the role itself.",
   "",
