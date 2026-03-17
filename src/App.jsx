@@ -416,7 +416,7 @@ export default function TalentMap() {
     try {
       const res = await fetch("/api/generate", {
         method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:4000, messages:[{ role:"user", content:buildPrompt(form) }] })
+        body: JSON.stringify({ model:"llama-3.3-70b-versatile", max_tokens:8000, messages:[{ role:"user", content:buildPrompt(form) }] })
       });
       const data = await res.json();
       if (!res.ok) { setError("API error " + res.status + ": " + JSON.stringify(data)); setLoading(false); return; }
