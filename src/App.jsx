@@ -310,18 +310,14 @@ function renderMessage(text) {
 
   return (
     <>
-      {/* Floating button with face + name */}
+      {/* Floating button with face */}
       <button type="button" onClick={() => setOpen(v => !v)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-3 py-2 rounded-full bg-slate-900 border border-sky-500/60 hover:border-sky-400 transition-all"
-        style={{boxShadow: open ? "0 0 20px #38bdf855" : "0 0 12px #38bdf833"}}>
+        className="fixed bottom-6 right-6 z-50 transition-all hover:scale-110"
+        style={{filter: open ? "drop-shadow(0 0 12px #38bdf8)" : "drop-shadow(0 0 6px #38bdf888)"}}>
         {open
-          ? <div className="w-7 h-7 rounded-full bg-slate-800 border border-sky-400 flex items-center justify-center text-sky-400 text-base font-bold">×</div>
+          ? <div className="w-12 h-12 rounded-full bg-slate-900 border-2 border-sky-400 flex items-center justify-center text-sky-400 text-xl font-bold" style={{boxShadow:"0 0 16px #38bdf888"}}>×</div>
           : <AvatarFace thinking={false}/>
         }
-        <div className="text-left">
-          <div className="text-[10px] font-bold text-sky-400 tracking-widest uppercase leading-tight">Compass</div>
-          <div className="text-[9px] text-slate-500 leading-tight">Ask me anything</div>
-        </div>
       </button>
 
       {/* Chat window */}
