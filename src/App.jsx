@@ -266,7 +266,13 @@ function AvatarFace({ thinking }) {
   );
 }
 
-function Chatbot() {
+function renderMessage(text) {
+  const parts = text.split(/\*([^*]+)\*/g);
+  return parts.map((p, i) => i % 2 === 1
+    ? <strong key={i} className="text-sky-300 font-semibold">{p}</strong>
+    : <span key={i}>{p}</span>
+  );
+}
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role:"assistant", text:"Hey! I'm Compass, your SourcingCompass guide. Ask me anything about how the tool works, what the scores mean, or how to get better results!" }
@@ -290,7 +296,7 @@ function Chatbot() {
       const res = await fetch("/api/generate", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ messages:[
-          { role:"user", content:"You are Compass, a friendly AI assistant for SourcingCompass. You have a slightly nerdy, helpful personality. Use only the following documentation to answer questions. Be concise, clear, and add a touch of personality. If the question is not about SourcingCompass, politely say you can only help with questions about the tool.\n\nDOCUMENTATION:\n" + DOC_CONTEXT + "\n\nConversation so far:\n" + history.map(h=>h.role+": "+h.content).join("\n") + "\n\nUser question: " + q }
+          { role:"user", content:"You are Compass, a friendly AI assistant for SourcingCompass. You have a slightly nerdy, helpful personality. Use only the following documentation to answer questions.\n\nRESPONSE RULES:\n- By default: answer in 2-3 short sentences max. Be direct and clear.\n- If the user asks to explain in detail, go deeper with bullet points and structure.\n- Bold key terms using *asterisks* when helpful.\n- Never use long paragraphs by default.\n- If the question is not about SourcingCompass, politely say you can only help with questions about the tool.\n\nDOCUMENTATION:\n" + DOC_CONTEXT + "\n\nConversation so far:\n" + history.map(h=>h.role+": "+h.content).join("\n") + "\n\nUser question: " + q }
         ]})
       });
       const data = await res.json();
@@ -304,14 +310,18 @@ function Chatbot() {
 
   return (
     <>
-      {/* Floating button with face */}
+      {/* Floating button with face + name */}
       <button type="button" onClick={() => setOpen(v => !v)}
-        className="fixed bottom-6 right-6 z-50 transition-all hover:scale-110"
-        style={{filter: open ? "drop-shadow(0 0 12px #38bdf8)" : "drop-shadow(0 0 6px #38bdf888)"}}>
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-3 py-2 rounded-full bg-slate-900 border border-sky-500/60 hover:border-sky-400 transition-all"
+        style={{boxShadow: open ? "0 0 20px #38bdf855" : "0 0 12px #38bdf833"}}>
         {open
-          ? <div className="w-12 h-12 rounded-full bg-slate-900 border-2 border-sky-400 flex items-center justify-center text-sky-400 text-xl font-bold" style={{boxShadow:"0 0 16px #38bdf888"}}>×</div>
+          ? <div className="w-7 h-7 rounded-full bg-slate-800 border border-sky-400 flex items-center justify-center text-sky-400 text-base font-bold">×</div>
           : <AvatarFace thinking={false}/>
         }
+        <div className="text-left">
+          <div className="text-[10px] font-bold text-sky-400 tracking-widest uppercase leading-tight">Compass</div>
+          <div className="text-[9px] text-slate-500 leading-tight">Ask me anything</div>
+        </div>
       </button>
 
       {/* Chat window */}
@@ -340,7 +350,7 @@ function Chatbot() {
                   (m.role === "user"
                     ? "bg-sky-600/80 text-white rounded-br-none"
                     : "bg-slate-800 text-slate-300 border border-slate-700/60 rounded-bl-none")}>
-                  {m.text}
+                  {renderMessage(m.text)}
                 </div>
               </div>
             ))}
