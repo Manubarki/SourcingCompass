@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 
 const GRID_SIZE = 40;
 
+const DOC_CONTEXT = "SourcingCompass is a talent intelligence tool built by Manu Barki at Atlan. It helps recruiters find where talent lives by generating a map of Target Companies, Adjacent Talent Pools, Wildcard Bets, and Target Titles for any role. It uses Claude Sonnet via Anthropic API, hosted on Vercel, built with React + Vite + Tailwind. The company memory is grounded in a MAD landscape dataset of 2000+ ML/AI/Data ecosystem companies. Key features: tag-based skill input (press comma or Enter), JD parser (paste JD to auto-fill fields), CSV export, poachability signals ([Signal] = inferred pattern, [Confirmed] = reported fact), talent density, relevance scores, hover tooltip showing why a company is relevant. Four result tabs: Target Companies (with scores), Adjacent Pools (transferable skills), Wildcard Bets (unconventional tech companies only), Target Titles (exact LinkedIn search terms with confidence scores). No outreach templates feature. Location filter ensures companies have engineering presence in the specified location. AI model: Claude Sonnet (claude-sonnet-4-20250514). Cost guardrails: Claude Haiku for cheap calls, max_tokens managed. The tool does NOT store any candidate data. API key is secure on server. Temperature is low (0.2) for consistent results. The tool is intentionally stateless — every search is fresh. Poachability signals should not be used verbatim in outreach — use them to tailor your angle. Adjacent = one step removed from obvious. Wildcard = two or three steps removed, always a tech company. Target Titles help cast a wider LinkedIn net since same role has different titles at different companies.";
+
 function BlueprintGrid() {
   return (
     <svg className="absolute inset-0 w-full h-full" style={{opacity:0.15}}>
@@ -168,10 +170,10 @@ function Section({ cat, nodes }) {
 }
 
 const TABS = [
-  { id:"companies", label:"Target Companies",    dot:"#38bdf8" },
-  { id:"adjacent",  label:"Adjacent Pools",      dot:"#a78bfa" },
-  { id:"wildcards", label:"Wildcard Bets",        dot:"#fb923c" },
-  { id:"titles",    label:"Target Titles",        dot:"#34d399" },
+  { id:"companies", label:"Target Companies",  dot:"#38bdf8" },
+  { id:"adjacent",  label:"Adjacent Pools",    dot:"#a78bfa" },
+  { id:"wildcards", label:"Wildcard Bets",      dot:"#fb923c" },
+  { id:"titles",    label:"Target Titles",      dot:"#34d399" },
 ];
 
 function ResultTabs({ mapData }) {
@@ -197,9 +199,8 @@ function ResultTabs({ mapData }) {
 
 function LoadingScreen() {
   const [step, setStep] = useState(0);
-  const items = TABS;
   useEffect(() => {
-    const iv = setInterval(() => setStep(s => (s+1) % items.length), 800);
+    const iv = setInterval(() => setStep(s => (s+1) % TABS.length), 800);
     return () => clearInterval(iv);
   }, []);
   return (
@@ -207,10 +208,9 @@ function LoadingScreen() {
       <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin"/>
       <div className="space-y-2 text-center">
         <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-3">Finding</div>
-        {items.map((t, i) => (
+        {TABS.map((t, i) => (
           <div key={t.id} className={"flex items-center gap-2 transition-all duration-300 " + (i===step?"opacity-100":"opacity-20")}>
-            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{background:t.dot,boxShadow:i===step?"0 0 6px "+t.dot:"none"}}/>
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.dot,boxShadow:i===step?"0 0 6px "+t.dot:"none"}}/>
             <span className="text-xs tracking-widest uppercase font-mono" style={{color:i===step?t.dot:"#475569"}}>{t.label}</span>
           </div>
         ))}
@@ -219,12 +219,184 @@ function LoadingScreen() {
   );
 }
 
+function AvatarFace({ thinking }) {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+      <circle cx="18" cy="18" r="17" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.5"/>
+      {/* Grid lines on face */}
+      <line x1="18" y1="1" x2="18" y2="35" stroke="#38bdf8" strokeWidth="0.3" opacity="0.3"/>
+      <line x1="1" y1="18" x2="35" y2="18" stroke="#38bdf8" strokeWidth="0.3" opacity="0.3"/>
+      {/* Eyes */}
+      {thinking ? (
+        <>
+          <rect x="10" y="14" width="5" height="2" rx="1" fill="#38bdf8" opacity="0.9">
+            <animate attributeName="width" values="5;2;5" dur="1.2s" repeatCount="indefinite"/>
+          </rect>
+          <rect x="21" y="14" width="5" height="2" rx="1" fill="#38bdf8" opacity="0.9">
+            <animate attributeName="width" values="5;2;5" dur="1.2s" repeatCount="indefinite"/>
+          </rect>
+        </>
+      ) : (
+        <>
+          <rect x="10" y="13" width="5" height="5" rx="1.5" fill="#38bdf8" opacity="0.9"/>
+          <rect x="21" y="13" width="5" height="5" rx="1.5" fill="#38bdf8" opacity="0.9"/>
+          <rect x="12" y="15" width="2" height="2" rx="0.5" fill="#0f172a"/>
+          <rect x="23" y="15" width="2" height="2" rx="0.5" fill="#0f172a"/>
+        </>
+      )}
+      {/* Mouth */}
+      {thinking ? (
+        <path d="M12 24 Q18 22 24 24" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.8">
+          <animate attributeName="d" values="M12 24 Q18 22 24 24;M12 23 Q18 25 24 23;M12 24 Q18 22 24 24" dur="1s" repeatCount="indefinite"/>
+        </path>
+      ) : (
+        <path d="M12 23 Q18 27 24 23" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.8"/>
+      )}
+      {/* Antenna */}
+      <line x1="18" y1="1" x2="18" y2="6" stroke="#38bdf8" strokeWidth="1.5"/>
+      <circle cx="18" cy="5" r="1.5" fill="#38bdf8">
+        <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
+      {/* Circuit lines on cheeks */}
+      <line x1="2" y1="16" x2="8" y2="16" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
+      <line x1="5" y1="16" x2="5" y2="20" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
+      <line x1="28" y1="16" x2="34" y2="16" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
+      <line x1="31" y1="16" x2="31" y2="20" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
+    </svg>
+  );
+}
+
+function Chatbot() {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([
+    { role:"assistant", text:"Hey! I'm Compass, your SourcingCompass guide. Ask me anything about how the tool works, what the scores mean, or how to get better results!" }
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [messages]);
+
+  async function send() {
+    const q = input.trim();
+    if (!q || loading) return;
+    setInput("");
+    setMessages(m => [...m, { role:"user", text:q }]);
+    setLoading(true);
+    try {
+      const history = messages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
+      const res = await fetch("/api/generate", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ messages:[
+          { role:"user", content:"You are Compass, a friendly AI assistant for SourcingCompass. You have a slightly nerdy, helpful personality. Use only the following documentation to answer questions. Be concise, clear, and add a touch of personality. If the question is not about SourcingCompass, politely say you can only help with questions about the tool.\n\nDOCUMENTATION:\n" + DOC_CONTEXT + "\n\nConversation so far:\n" + history.map(h=>h.role+": "+h.content).join("\n") + "\n\nUser question: " + q }
+        ]})
+      });
+      const data = await res.json();
+      const text = data.content?.map(b => b.text||"").join("").trim() || "Hmm, I couldn't get a response. Try again!";
+      setMessages(m => [...m, { role:"assistant", text }]);
+    } catch(e) {
+      setMessages(m => [...m, { role:"assistant", text:"Something went wrong. Please try again!" }]);
+    }
+    setLoading(false);
+  }
+
+  return (
+    <>
+      {/* Floating button with face */}
+      <button type="button" onClick={() => setOpen(v => !v)}
+        className="fixed bottom-6 right-6 z-50 transition-all hover:scale-110"
+        style={{filter: open ? "drop-shadow(0 0 12px #38bdf8)" : "drop-shadow(0 0 6px #38bdf888)"}}>
+        {open
+          ? <div className="w-12 h-12 rounded-full bg-slate-900 border-2 border-sky-400 flex items-center justify-center text-sky-400 text-xl font-bold" style={{boxShadow:"0 0 16px #38bdf888"}}>×</div>
+          : <AvatarFace thinking={false}/>
+        }
+      </button>
+
+      {/* Chat window */}
+      {open && (
+        <div className="fixed bottom-20 right-6 z-50 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+          style={{height:"440px", boxShadow:"0 0 40px #38bdf822"}}>
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-slate-700/50 flex items-center gap-3 bg-slate-800/50">
+            <AvatarFace thinking={loading}/>
+            <div>
+              <div className="text-xs font-bold text-sky-400 tracking-widest uppercase">Compass</div>
+              <div className="text-[10px] text-slate-500">{loading ? "Thinking..." : "SourcingCompass Guide"}</div>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            {messages.map((m, i) => (
+              <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start gap-2 items-end"}>
+                {m.role === "assistant" && (
+                  <div className="flex-shrink-0 mb-0.5">
+                    <AvatarFace thinking={false}/>
+                  </div>
+                )}
+                <div className={"max-w-[80%] rounded-lg px-3 py-2 text-[11px] leading-relaxed " +
+                  (m.role === "user"
+                    ? "bg-sky-600/80 text-white rounded-br-none"
+                    : "bg-slate-800 text-slate-300 border border-slate-700/60 rounded-bl-none")}>
+                  {m.text}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex justify-start gap-2 items-end">
+                <AvatarFace thinking={true}/>
+                <div className="bg-slate-800 border border-slate-700/60 rounded-lg rounded-bl-none px-3 py-2.5">
+                  <div className="flex gap-1">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce" style={{animationDelay:i*0.15+"s"}}/>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef}/>
+          </div>
+
+          {/* Suggested questions */}
+          {messages.length === 1 && (
+            <div className="px-3 pb-2 flex flex-wrap gap-1">
+              {["What is poachability?","How do I use the JD parser?","What's a wildcard bet?"].map(q => (
+                <button key={q} type="button" onClick={() => { setInput(q); }}
+                  className="text-[9px] px-2 py-1 rounded border border-slate-700 text-slate-500 hover:text-sky-400 hover:border-sky-700 transition-all">
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="px-3 py-3 border-t border-slate-700/50 flex gap-2">
+            <input
+              className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
+              placeholder="Ask Compass anything..."
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && send()}
+            />
+            <button type="button" onClick={send} disabled={loading || !input.trim()}
+              className="px-3 py-1.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-900 text-xs font-bold disabled:opacity-40 transition-all">
+              →
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function buildPrompt(form) {
   return [
     "You are a talent intelligence system. Return a structured talent map as JSON only. No markdown, no explanation, no backticks.",
     "",
     "CRITICAL: Every company you suggest MUST be a real company that exists today. Do NOT invent community groups, open source projects, contributor pools, or spin-off descriptions as company names. Only suggest actual incorporated companies.",
-    "CRITICAL: Only suggest companies that have a significant engineering presence in " + (form.location || "the specified location") + ". If a company does not have engineers or an R&D office in " + (form.location || "the specified location") + ", do not suggest it.",
+    "CRITICAL: Location is " + (form.location || "not specified") + ". You MUST ONLY suggest companies that have an actual engineering office, R&D center, or significant remote engineering team in " + (form.location || "the specified location") + ". For India, focus on: Indian product companies, Indian unicorns, Indian offices of global companies that have large engineering teams in India.",
     "",
     "Role: " + form.role,
     "Hiring Company: " + form.company,
@@ -240,9 +412,9 @@ function buildPrompt(form) {
     "Rules:",
     "- 6-8 companies (mix of established AND 3-4 startups)",
     "- NEVER include " + form.company + " in results",
-    "- Only suggest companies with real engineering teams in " + (form.location || "the specified location"),
+    "- Only real companies with engineering presence in " + (form.location || "the specified location"),
     "- adjacent = 4-5 specific companies with transferable skills, not job titles",
-    "- wildcards = 3-4 unconventional TECH companies (not banks, manufacturers, or conglomerates) with engineers who have surprising but specific skill overlap with the role. Must be software/internet/data companies.",
+    "- wildcards = 3-4 unconventional TECH companies only (not banks, manufacturers, or conglomerates)",
     "- titles = 5-7 exact job titles as on real postings",
     "- confidence/talentDensity/poachability = 0-100",
     "- poachabilitySignals = 2-3 strings prefixed [Signal] or [Confirmed]",
@@ -433,6 +605,8 @@ export default function TalentMap() {
           </div>
         )}
       </div>
+
+      <Chatbot/>
     </div>
   );
 }
