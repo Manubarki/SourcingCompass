@@ -432,7 +432,11 @@ export default function TalentMap() {
       });
       const data = await res.json();
       const raw = data.content?.map(b => b.text||"").join("").trim();
-      const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
+      let clean = raw.replace(/```json|```/g,"").trim();
+      // Find the last complete JSON object by trimming at the last closing brace
+      const lastBrace = clean.lastIndexOf("}");
+      if (lastBrace !== -1) clean = clean.slice(0, lastBrace + 1);
+      const parsed = JSON.parse(clean);
       setForm(f => ({...f, role:parsed.role||f.role, seniority:parsed.seniority||f.seniority, skills:parsed.skills?.length?parsed.skills:f.skills}));
       setShowJD(false);
     } catch(e) { setError("JD parse failed: " + e.message); }
