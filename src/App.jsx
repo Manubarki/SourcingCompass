@@ -1,130 +1,195 @@
 import { useState, useRef, useEffect } from "react";
 
-const GRID_SIZE = 40;
+const DOC_CONTEXT = `SourcingCompass is a talent intelligence tool that answers "where do people like this actually work?" — generating an AI-powered map of the talent landscape for any role in under 30 seconds.
 
-const DOC_CONTEXT = "SourcingCompass is a talent intelligence tool built by Manu Barki at Atlan. It helps recruiters find where talent lives by generating a map of Target Companies, Adjacent Talent Pools, Wildcard Bets, and Target Titles for any role. It uses Claude Sonnet via Anthropic API, hosted on Vercel, built with React + Vite + Tailwind. The company memory is grounded in a MAD landscape dataset of 2000+ ML/AI/Data ecosystem companies. Key features: tag-based skill input (press comma or Enter), JD parser (paste JD to auto-fill fields), CSV export, poachability signals ([Signal] = inferred pattern, [Confirmed] = reported fact), talent density, relevance scores, hover tooltip showing why a company is relevant. Four result tabs: Target Companies (with scores), Adjacent Pools (transferable skills), Wildcard Bets (unconventional tech companies only), Target Titles (exact LinkedIn search terms with confidence scores). No outreach templates feature. Location filter ensures companies have engineering presence in the specified location. AI model: Claude Sonnet (claude-sonnet-4-20250514). The tool does NOT store any candidate data. API key is secure on server. The tool is intentionally stateless — every search is fresh. Poachability signals should not be used verbatim in outreach — use them to tailor your angle. Adjacent = one step removed from obvious. Wildcard = two or three steps removed, always a tech company. Target Titles help cast a wider LinkedIn net since same role has different titles at different companies.";
+HOW TO USE:
+Fill in Role Title, Hiring Company (excluded from results), Location, Seniority, Must-Have Skills (comma or Enter to add tags), Industries, Exclusions. Optionally paste a JD and click "Parse JD" to auto-fill fields. Click Generate Map.
 
-function BlueprintGrid() {
-  return (
-    <svg className="absolute inset-0 w-full h-full" style={{opacity:0.15}}>
-      <defs>
-        <pattern id="smallGrid" width={GRID_SIZE/4} height={GRID_SIZE/4} patternUnits="userSpaceOnUse">
-          <path d={"M " + (GRID_SIZE/4) + " 0 L 0 0 0 " + (GRID_SIZE/4)} fill="none" stroke="#7dd3fc" strokeWidth="0.3"/>
-        </pattern>
-        <pattern id="grid" width={GRID_SIZE} height={GRID_SIZE} patternUnits="userSpaceOnUse">
-          <rect width={GRID_SIZE} height={GRID_SIZE} fill="url(#smallGrid)"/>
-          <path d={"M " + GRID_SIZE + " 0 L 0 0 0 " + GRID_SIZE} fill="none" stroke="#7dd3fc" strokeWidth="0.7"/>
-        </pattern>
-      </defs>
-      <rect width="100%" height="100%" fill="url(#grid)"/>
-    </svg>
-  );
-}
+FOUR RESULT TABS:
+1. Target Companies (blue) — Real companies employing people with your exact skills. Each card shows: Relevance (skill match 0-100), Talent Density (how concentrated talent is there), Poachability (likelihood to move). Stage badge = company lifecycle. Hover card = "Why Relevant" tooltip.
+2. Adjacent Talent Pools (purple) — Companies with transferable skills, not direct competitors. Skill overlap matters, not product similarity. Candidates your competitors aren't sourcing.
+3. Wildcard Bets (orange) — Surprising non-obvious tech companies with strong skill overlap. E.g. gaming company for real-time data engineers. Only tech/software companies, never banks or manufacturers.
+4. Target Titles (green) — Exact job titles as they appear across companies. Use directly in LinkedIn search: title + target company = pre-qualified pool in 2 minutes.
 
+SCORES EXPLAINED:
+- Relevance: 90+ = very close match. 60-70 = good overlap. Below 60 = stretch.
+- High relevance ≠ best target. A 70% relevance + 85% poachability company often beats 95% relevance + 30% poachability.
+- Talent Density: how concentrated relevant talent is. A 50-person AI startup can have higher density than a huge enterprise.
+- Poachability signals: [Confirmed] = specific reported fact (layoffs, markdowns). [Signal] = inferred pattern (slow promotions, equity underwater). Use to tailor outreach angle, not to quote directly.
+
+CANDIDATES TAB (pink):
+Live Google X-ray sourcing via Serper across target companies. Shows real LinkedIn profiles. Always verify before outreach.
+
+JD PARSER:
+Paste any job description → auto-extracts role title, seniority, key skills. Edit tags manually if needed (× to remove, type + Enter to add).
+
+CSV EXPORT:
+Downloads all four sections as a spreadsheet — opens in Excel or Google Sheets.
+
+COMPANY MEMORY:
+Grounded in 2000+ verified ML/AI/Data ecosystem companies from the MAD Firstmark landscape. Significantly reduces hallucinations vs pure AI generation.
+
+TIPS:
+- Add specific skills (e.g. "Apache Iceberg, dbt, Spark") for much better results
+- Use Exclusions for companies already sourced or off-limits
+- Try different seniority levels — Staff vs Senior return different company mixes
+- High poachability + moderate relevance = often the best sourcing target
+
+BUILT BY: Manu Barki, Talent Partner at Atlan. Stack: React + Vite + Express on Railway, Claude Sonnet via LiteLLM proxy.`;
+
+
+
+// ─── Category config ──────────────────────────────────────────────────────────
 const CAT = {
-  companies: { bg:"bg-sky-900/80",    border:"border-sky-400",    text:"text-sky-300",    badge:"bg-sky-400/20 text-sky-300",    dot:"#38bdf8", label:"Target Companies",     desc:"Direct sourcing targets — companies where your ideal candidate likely works today" },
-  adjacent:  { bg:"bg-violet-900/80", border:"border-violet-400", text:"text-violet-300", badge:"bg-violet-400/20 text-violet-300",dot:"#a78bfa", label:"Adjacent Talent Pools", desc:"Companies with transferable skills — not obvious, but highly relevant" },
-  wildcards: { bg:"bg-orange-900/80", border:"border-orange-400", text:"text-orange-300", badge:"bg-orange-400/20 text-orange-300",dot:"#fb923c", label:"Wildcard Bets",          desc:"Unconventional bets — surprising sources most recruiters never think to check" },
-  titles:    { bg:"bg-emerald-900/80",border:"border-emerald-400",text:"text-emerald-300",badge:"bg-emerald-400/20 text-emerald-300",dot:"#34d399", label:"Target Titles",         desc:"Exact LinkedIn search terms — copy these directly into your search" },
+  companies: { dot:"#4d64d8", label:"Target Companies",     desc:"Direct sourcing targets — companies where your ideal candidate likely works today" },
+  adjacent:  { dot:"#9b6ef5", label:"Adjacent Talent Pools", desc:"Companies with transferable skills — not obvious, but highly relevant" },
+  wildcards: { dot:"#f6720d", label:"Wildcard Bets",         desc:"Unconventional bets — surprising sources most recruiters never think to check" },
+  titles:    { dot:"#1da882", label:"Target Titles",          desc:"Exact LinkedIn search terms — copy these directly into your search" },
 };
 
-const STAGES = {
-  "Public":    "bg-sky-900/60 text-sky-300 border-sky-700",
-  "Enterprise":"bg-sky-900/60 text-sky-300 border-sky-700",
-  "Late Stage":"bg-violet-900/60 text-violet-300 border-violet-700",
-  "Series C+": "bg-violet-900/60 text-violet-300 border-violet-700",
-  "Series B":  "bg-amber-900/60 text-amber-300 border-amber-700",
-  "Series A":  "bg-orange-900/60 text-orange-300 border-orange-700",
-  "Seed":      "bg-rose-900/60 text-rose-300 border-rose-700",
-};
-
+// ─── Tag input ────────────────────────────────────────────────────────────────
 function TagInput({ placeholder, tags, onChange }) {
   const [input, setInput] = useState("");
   const ref = useRef(null);
   function handleKey(e) {
     if ((e.key === "," || e.key === "Enter") && input.trim()) {
-      e.preventDefault();
-      onChange([...tags, input.trim().replace(/,$/, "")]);
-      setInput("");
+      e.preventDefault(); onChange([...tags, input.trim().replace(/,$/, "")]); setInput("");
     } else if (e.key === "Backspace" && !input && tags.length) {
       onChange(tags.slice(0, -1));
     }
   }
   function handlePaste(e) {
     e.preventDefault();
-    const parts = e.clipboardData.getData("text").split(/[,\n]+/).map(t => t.trim()).filter(Boolean);
-    if (parts.length > 1) onChange([...tags, ...parts]);
-    else setInput(parts[0] || "");
+    const parts = e.clipboardData.getData("text").split(/[,\n]+/).map(t=>t.trim()).filter(Boolean);
+    if (parts.length > 1) onChange([...tags, ...parts]); else setInput(parts[0] || "");
   }
   return (
-    <div className="w-full min-h-[38px] bg-slate-800 border border-slate-600 rounded px-2 py-1.5 flex flex-wrap gap-1 focus-within:border-sky-500 cursor-text"
+    <div className="w-full min-h-[40px] bg-sidebar-input border border-white/10 rounded-md px-2.5 py-1.5 flex flex-wrap gap-1.5 cursor-text focus-within:border-sidebar-accent/50 transition-colors"
       onClick={() => ref.current?.focus()}>
       {tags.map((t, i) => (
-        <span key={i} className="flex items-center gap-1 bg-sky-900/60 border border-sky-700 text-sky-300 text-[10px] px-1.5 py-0.5 rounded font-mono">
+        <span key={i} className="flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-md font-medium" style={{background:"rgba(29,168,130,0.15)",border:"1px solid rgba(29,168,130,0.35)",color:"#24c9a0"}}>
           {t}
-          <button type="button" onClick={e => { e.stopPropagation(); onChange(tags.filter((_, j) => j !== i)); }} className="text-sky-500 hover:text-sky-200 leading-none">x</button>
+          <button type="button" onClick={e=>{e.stopPropagation();onChange(tags.filter((_,j)=>j!==i))}}
+            style={{color:"rgba(36,201,160,0.6)",background:"none",border:"none",cursor:"pointer",padding:0,lineHeight:1}} className="leading-none ml-0.5">×</button>
         </span>
       ))}
-      <input ref={ref} className="bg-transparent text-xs text-slate-200 placeholder-slate-600 outline-none flex-1 min-w-[80px]"
-        placeholder={tags.length ? "" : placeholder} value={input}
-        onChange={e => setInput(e.target.value)} onKeyDown={handleKey} onPaste={handlePaste}/>
+      <input ref={ref} className="sidebar-input bg-transparent outline-none flex-1 min-w-[80px]"
+        style={{fontSize:"13px",color:"#bfc8d6"}} placeholder={tags.length?"":placeholder} value={input}
+        onChange={e=>setInput(e.target.value)} onKeyDown={handleKey} onPaste={handlePaste}/>
     </div>
   );
 }
 
-function Bar({ label, value, color }) {
+// ─── Score bar ────────────────────────────────────────────────────────────────
+function scoreColor(value) {
+  if (value >= 80) return { color:"#16a34a", track:"rgba(22,163,74,0.12)" };  // green — high
+  if (value >= 60) return { color:"#d97706", track:"rgba(217,119,6,0.12)"  };  // amber — medium
+  return              { color:"#dc2626", track:"rgba(220,38,38,0.12)"  };       // red — low
+}
+
+function Bar({ label, value }) {
+  const { color, track } = scoreColor(value ?? 0);
   return (
-    <div className="mt-1.5">
-      <div className="flex justify-between mb-0.5">
-        <span className="text-[9px] text-slate-500 tracking-widest uppercase">{label}</span>
-        <span className="text-[10px] font-bold font-mono" style={{color}}>{value}</span>
+    <div style={{marginTop:"10px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+        <span style={{fontSize:"13px",color:"#6b7280",fontWeight:500,fontFamily:"Inter,sans-serif"}}>{label}</span>
+        <span style={{fontSize:"13px",fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color}}>{value}</span>
       </div>
-      <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
-        <div className="h-full rounded-full transition-all duration-700" style={{width:`${value}%`,background:color,boxShadow:`0 0 6px ${color}88`}}/>
+      <div style={{width:"100%",height:"6px",borderRadius:"999px",background:track}}>
+        <div style={{height:"100%",borderRadius:"999px",background:color,width:`${(value??0)}%`,transition:"width 0.7s ease"}}/>
       </div>
     </div>
   );
+}
+
+// ─── Company card ─────────────────────────────────────────────────────────────
+const NAME_COLORS = ["#2563eb","#7c3aed","#0891b2","#059669","#dc2626","#d97706","#db2777","#4f46e5"];
+function nameColor(label) {
+  let h = 0;
+  for(let i=0;i<label.length;i++) h = (h*31 + label.charCodeAt(i)) & 0xffff;
+  return NAME_COLORS[h % NAME_COLORS.length];
 }
 
 function CompanyCard({ node }) {
   const [hov, setHov] = useState(false);
-  const s = CAT.companies;
+  const color = nameColor(node.label||"");
   return (
-    <div className={"relative rounded border " + s.bg + " " + s.border + " p-3 transition-all duration-200 select-none overflow-visible " + (hov ? "shadow-lg z-20" : "hover:shadow-md")}
-      style={{boxShadow: hov ? "0 0 16px 2px " + s.dot + "55" : undefined}}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
-      <div className="flex items-start justify-between gap-1 mb-1">
-        <div className={"text-xs font-bold tracking-widest uppercase " + s.text}>{node.label}</div>
-        {node.stage && <span className={"text-[9px] px-1.5 py-0.5 rounded border font-mono whitespace-nowrap flex-shrink-0 " + (STAGES[node.stage] || "bg-slate-800 text-slate-400 border-slate-600")}>{node.stage}</span>}
+    <div style={{
+        position:"relative", background:"#ffffff", border:"1px solid #e5e7eb",
+        borderRadius:"10px", padding:"16px", cursor:"default",
+        boxShadow: hov ? "0 8px 24px rgba(77,100,216,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
+        transition:"box-shadow .15s, border-color .15s",
+        borderColor: hov ? "#d2d8f8" : "#e5e7eb",
+        overflow:"visible", zIndex: hov ? 10 : 1,
+      }}
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"8px",marginBottom:"4px"}}>
+        <div style={{fontSize:"15px",fontWeight:700,color,fontFamily:"Inter,sans-serif",letterSpacing:"-0.01em"}}>{node.label}</div>
+        {node.stage && (
+          <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"999px",background:"#f3f4f6",color:"#6b7280",border:"1px solid #e5e7eb",fontWeight:500,whiteSpace:"nowrap",flexShrink:0,fontFamily:"Inter,sans-serif"}}>{node.stage}</span>
+        )}
       </div>
-      {node.sub && <div className="text-xs text-slate-400">{node.sub}</div>}
-      {node.tags && <div className="flex flex-wrap gap-1 mt-2">{node.tags.map(t => <span key={t} className={"text-[10px] px-1.5 py-0.5 rounded font-mono " + s.badge}>{t}</span>)}</div>}
-      {node.talentDensity != null && <Bar label="Talent Density" value={node.talentDensity} color="#38bdf8"/>}
-      {node.confidence != null && <Bar label="Relevance" value={node.confidence} color="#34d399"/>}
-      {node.poachability != null && <Bar label="Poachability" value={node.poachability} color="#facc15"/>}
-      {node.likelyProfile && (
-        <div className="mt-2 pt-2 border-t border-slate-700/50">
-          <div className="text-[9px] text-slate-500 tracking-widest uppercase mb-1">Likely Talent Profile</div>
-          <div className="text-[10px] text-slate-400 leading-relaxed">{node.likelyProfile}</div>
-        </div>
-      )}
-      {node.poachabilitySignals && node.poachabilitySignals.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-yellow-900/40">
-          <div className="text-[9px] text-yellow-600 tracking-widest uppercase mb-1">Poachability Signals</div>
-          {node.poachabilitySignals.map((sig, i) => (
-            <div key={i} className="flex gap-1.5 mt-1">
-              <span className="text-yellow-600 text-[9px] mt-0.5 flex-shrink-0">*</span>
-              <span className="text-[10px] text-slate-400 leading-relaxed">{sig}</span>
-            </div>
+      {node.sub && <div style={{fontSize:"13px",color:"#6b7280",marginBottom:"10px",fontFamily:"Inter,sans-serif"}}>{node.sub}</div>}
+      {node.tags && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"10px"}}>
+          {node.tags.map(t=>(
+            <span key={t} style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:500,background:"#eff2fe",color:"#4d64d8",border:"1px solid #d2d8f8",fontFamily:"Inter,sans-serif"}}>{t}</span>
           ))}
         </div>
       )}
-      {node.whyRelevant && (
-        <div className="absolute top-0 left-full z-50 pl-2 pointer-events-none"
-          style={{width:"220px",opacity:hov?1:0,transform:hov?"translateX(0)":"translateX(-12px)",transition:"opacity 0.25s ease,transform 0.25s ease"}}>
-          <div className="bg-slate-800 border border-sky-500/40 rounded-lg p-3 shadow-xl" style={{borderLeft:"3px solid #38bdf8"}}>
-            <div className="text-[9px] text-sky-400 tracking-widest uppercase mb-1">Why relevant</div>
-            <div className="text-[11px] text-slate-300 leading-relaxed">{node.whyRelevant}</div>
+      <Bar label="Relevance" value={node.confidence??0}/>
+      <Bar label="Talent Density" value={node.talentDensity??0}/>
+      <Bar label="Poachability" value={node.poachability??0}/>
+      {node.likelyProfile && (
+        <div style={{marginTop:"12px",paddingTop:"12px",borderTop:"1px solid #f3f4f6"}}>
+          <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"4px",fontFamily:"Inter,sans-serif"}}>Likely Profile</div>
+          <div style={{fontSize:"12px",color:"#6b7280",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>{node.likelyProfile}</div>
+        </div>
+      )}
+      {node.poachabilitySignals?.length > 0 && (
+        <div style={{marginTop:"10px",paddingTop:"10px",borderTop:"1px solid #f3f4f6"}}>
+          <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",fontFamily:"Inter,sans-serif"}}>Signals</div>
+          {node.poachabilitySignals.map((sig,i)=>{
+            const isConfirmed = sig.toLowerCase().startsWith("[confirmed]");
+            const isSignal    = sig.toLowerCase().startsWith("[signal]");
+            const text = sig.replace(/^\[(confirmed|signal)\]\s*/i,"").trim();
+            return (
+              <div key={i} style={{display:"flex",alignItems:"flex-start",gap:"7px",marginTop:"6px"}}>
+                {isConfirmed && (
+                  <span style={{
+                    fontSize:"10px",fontWeight:700,padding:"1px 6px",borderRadius:"4px",
+                    background:"#dcfce7",color:"#15803d",border:"1px solid #bbf7d0",
+                    flexShrink:0,whiteSpace:"nowrap",marginTop:"1px",fontFamily:"Inter,sans-serif",
+                  }}>✓ Confirmed</span>
+                )}
+                {isSignal && (
+                  <span style={{
+                    fontSize:"10px",fontWeight:700,padding:"1px 6px",borderRadius:"4px",
+                    background:"#fef3c7",color:"#92400e",border:"1px solid #fde68a",
+                    flexShrink:0,whiteSpace:"nowrap",marginTop:"1px",fontFamily:"Inter,sans-serif",
+                  }}>~ Inferred</span>
+                )}
+                {!isConfirmed && !isSignal && (
+                  <span style={{color:"#d1d5db",fontSize:"12px",flexShrink:0,marginTop:"1px"}}>›</span>
+                )}
+                <span style={{fontSize:"12px",color:"#6b7280",lineHeight:1.4,fontFamily:"Inter,sans-serif"}}>{text}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {node.whyRelevant && hov && (
+        <div style={{
+          position:"absolute", top:"8px", left:"calc(100% + 12px)",
+          width:"220px", zIndex:100, pointerEvents:"none",
+        }}>
+          <div style={{
+            background:"#ffffff", border:"1px solid #d2d8f8",
+            borderLeft:"3px solid #4d64d8", borderRadius:"10px",
+            padding:"12px", boxShadow:"0 8px 24px rgba(77,100,216,0.15)",
+          }}>
+            <div style={{fontSize:"10px",color:"#4d64d8",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"6px",fontFamily:"Inter,sans-serif"}}>Why relevant</div>
+            <div style={{fontSize:"12px",color:"#374151",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>{node.whyRelevant}</div>
           </div>
         </div>
       )}
@@ -132,35 +197,46 @@ function CompanyCard({ node }) {
   );
 }
 
+// ─── Simple card ──────────────────────────────────────────────────────────────
 function SimpleCard({ node, cat }) {
   const s = CAT[cat];
+  const tagStyles = {
+    adjacent: "bg-purple-50 text-purple-700 border-purple-200",
+    wildcards: "bg-orange-50 text-orange-700 border-orange-200",
+    titles:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
   return (
-    <div className={"rounded border " + s.bg + " " + s.border + " p-3 transition-all duration-200 select-none hover:shadow-md"}>
-      <div className={"text-xs font-bold tracking-widest uppercase mb-1 " + s.text}>{node.label}</div>
-      {node.sub && <div className="text-xs text-slate-400">{node.sub}</div>}
-      {node.tags && <div className="flex flex-wrap gap-1 mt-2">{node.tags.map(t => <span key={t} className={"text-[10px] px-1.5 py-0.5 rounded font-mono " + s.badge}>{t}</span>)}</div>}
-      {cat === "titles" && node.confidence != null && (
-        <Bar label="Match Confidence" value={node.confidence} color={node.confidence>=80?"#34d399":node.confidence>=60?"#facc15":"#f87171"}/>
+    <div className="bg-card border border-border rounded-lg p-4 transition-all duration-200 hover:shadow-card-hover animate-fade-in">
+      <div style={{fontSize:"15px",fontWeight:700,color:nameColor(node.label||""),fontFamily:"Inter,sans-serif",marginBottom:"4px"}}>{node.label}</div>
+      {node.sub && <div className="text-sm text-muted-foreground mb-2">{node.sub}</div>}
+      {node.tags && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {node.tags.map(t=>(
+            <span key={t} className={`text-xs px-2.5 py-0.5 rounded-md font-medium border ${tagStyles[cat]||"bg-secondary text-muted-foreground border-border"}`}>{t}</span>
+          ))}
+        </div>
+      )}
+      {cat==="titles" && node.confidence != null && (
+        <Bar label="Confidence" value={node.confidence}/>
       )}
     </div>
   );
 }
 
+// ─── Section ──────────────────────────────────────────────────────────────────
 function Section({ cat, nodes }) {
   const s = CAT[cat];
   return (
     <div>
-      <div className="mb-3">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-2 h-2 rounded-full" style={{background:s.dot,boxShadow:"0 0 6px "+s.dot}}/>
-          <span className={"text-xs font-bold tracking-[0.2em] uppercase "+s.text}>{s.label}</span>
-          <div className="flex-1 border-t border-dashed" style={{borderColor:s.dot+"44"}}/>
-          <span className="text-[10px] font-mono text-slate-500">{nodes.length} nodes</span>
-        </div>
-        <div className="text-[10px] text-slate-600 ml-4">{s.desc}</div>
+      <div className="flex items-center gap-2.5 mb-2">
+        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:s.dot}}/>
+        <span className="text-xs font-semibold text-foreground tracking-widest uppercase">{s.label}</span>
+        <div className="flex-1 h-px bg-border"/>
+        <span className="text-xs text-muted-foreground">{nodes.length} results</span>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {nodes.map(n => cat === "companies"
+      <p className="text-xs text-muted-foreground mb-4 ml-4">{s.desc}</p>
+      <div className="grid grid-cols-3 gap-3" style={{overflow:"visible"}}>
+        {nodes.map(n => cat==="companies"
           ? <CompanyCard key={n.id} node={n}/>
           : <SimpleCard key={n.id} node={n} cat={cat}/>
         )}
@@ -169,49 +245,547 @@ function Section({ cat, nodes }) {
   );
 }
 
-const TABS = [
-  { id:"companies", label:"Target Companies", dot:"#38bdf8" },
-  { id:"adjacent",  label:"Adjacent Pools",   dot:"#a78bfa" },
-  { id:"wildcards", label:"Wildcard Bets",     dot:"#fb923c" },
-  { id:"titles",    label:"Target Titles",     dot:"#34d399" },
-];
-
-function ResultTabs({ mapData }) {
-  const [active, setActive] = useState("companies");
-  const nodes = { companies:mapData.companies, adjacent:mapData.adjacent, wildcards:mapData.wildcards, titles:mapData.titles };
+// ─── Candidate card ───────────────────────────────────────────────────────────
+// Highlight keywords in text — wraps matches in a styled span
+function highlight(text, keywords) {
+  if (!text || !keywords?.length) return <span>{text}</span>;
+  const clean = keywords.filter(k => k && k.length > 2);
+  if (!clean.length) return <span>{text}</span>;
+  const pattern = new RegExp(`(${clean.map(k => k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")})`, "gi");
+  const parts = text.split(pattern);
   return (
-    <div>
-      <div className="flex flex-wrap gap-1 mb-6 border-b border-slate-700/50 pb-3">
-        {TABS.map(t => (
-          <button key={t.id} type="button" onClick={() => setActive(t.id)}
-            className={"flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-bold tracking-widest uppercase transition-all " +
-              (active===t.id ? "bg-slate-700 text-slate-200" : "text-slate-500 hover:text-slate-300")}>
-            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-              style={{background:active===t.id?t.dot:"#475569",boxShadow:active===t.id?"0 0 5px "+t.dot:"none"}}/>
-            {t.label}
-          </button>
-        ))}
+    <span>
+      {parts.map((part, i) =>
+        pattern.test(part)
+          ? <mark key={i} style={{background:"#fef3c7",color:"#92400e",borderRadius:"3px",padding:"0 2px",fontWeight:600}}>{part}</mark>
+          : <span key={i}>{part}</span>
+      )}
+    </span>
+  );
+}
+
+function CandidateCard({ candidate, index, keywords }) {
+  const initials = candidate.name.split(" ").slice(0,2).map(w=>w[0]||"").join("").toUpperCase()||"?";
+  const colors = ["#4d64d8","#1da882","#9b6ef5","#f6720d","#f04e7c"];
+  const color = colors[index % colors.length];
+  return (
+    <div style={{
+      background:"#ffffff", border:"1px solid #e5e7eb", borderRadius:"12px",
+      padding:"16px", transition:"box-shadow .15s, border-color .15s",
+      borderLeft:`3px solid ${color}`,
+    }}
+      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.08)";e.currentTarget.style.borderColor=color;}}
+      onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor="#e5e7eb";e.currentTarget.style.borderLeftColor=color;}}>
+
+      {/* Header row */}
+      <div style={{display:"flex",alignItems:"flex-start",gap:"12px"}}>
+        {/* Avatar */}
+        <div style={{
+          width:"44px",height:"44px",borderRadius:"50%",flexShrink:0,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:"13px",fontWeight:700,fontFamily:"Inter,sans-serif",
+          background:`${color}15`,border:`1.5px solid ${color}40`,color,
+        }}>{initials}</div>
+
+        {/* Name + title + company */}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"8px"}}>
+            <div>
+              <div style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif"}}>
+                {candidate.name}
+              </div>
+              {candidate.currentTitle && (
+                <div style={{fontSize:"12px",color:"#6b7280",marginTop:"2px",fontFamily:"Inter,sans-serif"}}>
+                  {highlight(candidate.currentTitle, keywords)}
+                </div>
+              )}
+              {candidate.currentCompany && (
+                <div style={{display:"flex",alignItems:"center",gap:"5px",marginTop:"4px"}}>
+                  <div style={{width:"6px",height:"6px",borderRadius:"50%",background:color,flexShrink:0}}/>
+                  <span style={{fontSize:"12px",fontWeight:600,color,fontFamily:"Inter,sans-serif"}}>{candidate.currentCompany}</span>
+                </div>
+              )}
+            </div>
+            <a href={candidate.linkedinUrl} target="_blank" rel="noopener noreferrer"
+              style={{flexShrink:0,display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",
+                borderRadius:"6px",fontSize:"11px",fontWeight:600,color:"#fff",
+                background:"linear-gradient(135deg,#0077b5,#0a66c2)",textDecoration:"none"}}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+              </svg>
+              View
+            </a>
+          </div>
+        </div>
       </div>
-      <Section cat={active} nodes={nodes[active]}/>
+
+      {/* Email */}
+      {candidate.email && (
+        <div style={{marginTop:"10px",display:"flex",alignItems:"center",gap:"6px",
+          padding:"6px 10px",borderRadius:"6px",background:"#f0fdf9",border:"1px solid #a7f3d0"}}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1da882" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+          </svg>
+          <span style={{fontSize:"11px",color:"#1da882",fontWeight:600,fontFamily:"Inter,sans-serif"}}>{candidate.email}</span>
+        </div>
+      )}
+
+      {/* Snippet with keyword highlighting */}
+      {candidate.snippet && (
+        <div style={{marginTop:"10px",padding:"10px 12px",background:"#f9fafb",borderRadius:"8px",
+          border:"1px solid #f3f4f6"}}>
+          <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",
+            letterSpacing:"0.08em",marginBottom:"5px",fontFamily:"Inter,sans-serif"}}>Profile snippet</div>
+          <p style={{fontSize:"12px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>
+            {highlight(candidate.snippet, keywords)}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-function LoadingScreen() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const iv = setInterval(() => setStep(s => (s+1) % TABS.length), 800);
-    return () => clearInterval(iv);
-  }, []);
+// ─── Candidates tab ───────────────────────────────────────────────────────────
+function CandidatesTab({ mapData, form }) {
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [sourced, setSourced] = useState(false);
+  const abortRef = useRef(null);
+
+  const allCompanies = [
+    ...(mapData.companies||[]).map(c=>({name:c.label,score:(c.confidence||0)+(c.poachability||0)})),
+    ...(mapData.adjacent ||[]).map(c=>({name:c.label,score:50})),
+    ...(mapData.wildcards||[]).map(c=>({name:c.label,score:40})),
+  ].sort((a,b)=>b.score-a.score);
+  const targetNames = allCompanies.map(c=>c.name);
+
+  function stop() { if(abortRef.current) abortRef.current.abort(); setLoading(false); }
+
+  async function source() {
+    if(abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
+    setLoading(true); setError(""); setCandidates([]);
+    try {
+      const res = await fetch("/api/source", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        signal: abortRef.current.signal,
+        body: JSON.stringify({companies:targetNames,role:form.role,skills:form.skills,seniority:form.seniority,location:form.location}),
+      });
+      const data = await res.json();
+      if(!res.ok){setError(data.error||"Source failed");setLoading(false);return;}
+      setCandidates(data.candidates||[]); setSourced(true);
+    } catch(e){if(e.name!=="AbortError")setError("Network error: "+e.message);}
+    setLoading(false);
+  }
+
+  function exportCSV() {
+    const rows=[["Name","Title","Company","LinkedIn","Email","Snippet"]];
+    candidates.forEach(c=>rows.push([c.name,c.currentTitle,c.currentCompany,c.linkedinUrl,c.email||"",c.snippet||""]));
+    const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download="Candidates_"+form.role.replace(/\s+/g,"_")+".csv"; a.click();
+  }
+
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6">
-      <div className="w-8 h-8 border-2 border-sky-400 border-t-transparent rounded-full animate-spin"/>
-      <div className="space-y-2 text-center">
-        <div className="text-[9px] text-slate-600 tracking-widest uppercase mb-3">Finding</div>
-        {TABS.map((t, i) => (
-          <div key={t.id} className={"flex items-center gap-2 transition-all duration-300 " + (i===step?"opacity-100":"opacity-20")}>
-            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.dot,boxShadow:i===step?"0 0 6px "+t.dot:"none"}}/>
-            <span className="text-xs tracking-widest uppercase font-mono" style={{color:i===step?t.dot:"#475569"}}>{t.label}</span>
+    <div>
+      <div className="flex items-center gap-2.5 mb-2">
+        <div className="w-2 h-2 rounded-full" style={{background:"hsl(340 82% 60%)"}}/>
+        <span className="text-xs font-semibold text-foreground tracking-widest uppercase">Live Candidates</span>
+        <div className="flex-1 h-px bg-border"/>
+        {sourced && <span className="text-xs text-muted-foreground">{candidates.length} found</span>}
+      </div>
+
+      <div className="mb-4 p-3 rounded-lg border border-border bg-secondary/50">
+        <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-2">Searching across</div>
+        <div className="flex flex-wrap gap-1.5">
+          {targetNames.slice(0,8).map((name,i)=>(
+            <span key={i} style={{fontSize:"12px",padding:"3px 10px",borderRadius:"6px",fontWeight:500,background:"#eff2fe",color:"#4d64d8",border:"1px solid #d2d8f8",fontFamily:"Inter,sans-serif"}}>{name}</span>
+          ))}
+          {targetNames.length>8&&<span className="text-xs text-muted-foreground px-1">+{targetNames.length-8} more</span>}
+        </div>
+      </div>
+
+      <div className="mb-4 text-xs text-muted-foreground">~{Math.min(targetNames.length,8)*2} Serper credits per search</div>
+
+      {error && <div className="mb-3 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">{error}</div>}
+
+      {!sourced && !loading && (
+        <button type="button" onClick={source}
+          style={{width:"100%",padding:"11px 16px",borderRadius:"8px",fontSize:"14px",fontWeight:600,color:"#fff",border:"none",cursor:"pointer",background:"#f04e7c",fontFamily:"Inter,sans-serif",boxShadow:"0 4px 12px rgba(240,78,124,0.35)"}}>
+          Source Candidates →
+        </button>
+      )}
+
+      {loading && (
+        <div className="flex flex-col items-center gap-4 py-12">
+          <div className="sc-spinner" style={{width:"24px",height:"24px",border:"2px solid #4d64d8",borderTopColor:"transparent",borderRadius:"50%"}}/>
+          <div className="text-center">
+            <div className="text-sm font-medium text-foreground">Scanning LinkedIn</div>
+            <div className="text-xs text-muted-foreground mt-1">{Math.min(targetNames.length,8)*2} queries in flight</div>
+          </div>
+          <button type="button" onClick={stop} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/30 text-destructive text-xs font-semibold hover:bg-destructive/10 transition-all">
+            <div className="w-1.5 h-1.5 rounded-sm bg-destructive"/>Stop
+          </button>
+        </div>
+      )}
+
+      {sourced && !loading && (
+        <>
+          {candidates.length===0 ? (
+            <div className="text-center py-10">
+              <div className="text-muted-foreground/30 text-3xl mb-3">∅</div>
+              <div className="text-sm font-medium text-foreground">No profiles found</div>
+              <div className="text-xs text-muted-foreground mt-1">Try broader skills or a different role title</div>
+              <button type="button" onClick={source} className="mt-4 px-5 py-2 rounded-lg text-xs font-semibold border border-border text-muted-foreground hover:border-primary hover:text-primary transition-all">Retry</button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-xs text-muted-foreground">{candidates.length} profiles · ranked by relevance</div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={exportCSV} className="px-3 py-1.5 rounded-md text-xs font-semibold bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20 transition-all">CSV</button>
+                  <button type="button" onClick={source} className="px-3 py-1.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:border-primary hover:text-primary transition-all">Re-run</button>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px"}}>
+                {candidates.map((c,i)=><CandidateCard key={c.linkedinUrl} candidate={c} index={i} keywords={[form.role,...(form.skills||[]),form.seniority].filter(Boolean)}/>)}
+              </div>
+              <div className="mt-4 text-xs text-muted-foreground text-center">X-ray sourced · always verify before outreach</div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+
+// ─── X-Ray Builder ────────────────────────────────────────────────────────────
+function XRayTab({ mapData, form }) {
+  const [copied, setCopied] = useState(null);
+
+  const LINKEDIN_SITE = {
+    "United States": "linkedin.com/in",
+    "Canada":        "ca.linkedin.com/in",
+    "India":         "in.linkedin.com/in",
+    "United Kingdom":"uk.linkedin.com/in",
+    "Europe":        "linkedin.com/in",
+    "Australia":     "au.linkedin.com/in",
+    "Singapore":     "sg.linkedin.com/in",
+  };
+  const site = LINKEDIN_SITE[form.location] || "linkedin.com/in";
+
+  // Generate strings
+  const companies = (mapData.companies||[]).map(c=>c.label);
+  const adjacent  = (mapData.adjacent ||[]).map(c=>c.label);
+  const wildcards = (mapData.wildcards||[]).map(c=>c.label);
+  const titles    = (mapData.titles   ||[]).map(t=>t.label);
+  const skill1    = form.skills?.[0] || "";
+  const skill2    = form.skills?.[1] || "";
+  const locHint   = (form.location==="United States"||form.location==="Europe") ? ` "${form.location}"` : "";
+
+  function buildStrings() {
+    const strings = [];
+    const coList = companies.slice(0,5).map(c=>`"${c}"`).join(" OR ");
+    // Last meaningful word of role for intitle: e.g. "Staff Software Engineer" -> "Engineer"
+    const roleWords = form.role.split(" ").filter(w => w.length > 3);
+    const lastWord  = roleWords[roleWords.length - 1] || form.role;
+
+    // All skills as AND quoted keywords
+    const allSkillsHint = (form.skills||[]).filter(Boolean).map(s=>`"${s}"`).join(" ");
+    const skillHint = allSkillsHint ? ` ${allSkillsHint}` : "";
+
+    // ── TIER 1: intitle:user's role + seniority keyword + skills ──────────────
+    // Use the EXACT role title user entered — seniority goes as a plain keyword
+    // Format: site:linkedin.com/in intitle:"Customer Success Manager" Senior "data governance"
+    const SENIORITY_ADJACENT_UI = {
+      "Intern":["Intern","Associate"],"Junior":["Junior","Associate"],
+      "Mid-Level":["Mid","Senior"],"Senior":["Senior","Lead"],
+      "Lead":["Lead","Senior","Staff"],"Staff":["Staff","Lead","Senior","Principal"],
+      "Principal":["Principal","Staff","Director"],"Manager":["Manager","Senior Manager"],
+      "Senior Manager":["Senior Manager","Director"],"Director":["Director","Senior Director"],
+      "Senior Director":["Senior Director","VP"],"VP":["VP","Vice President"],
+      "SVP":["SVP","VP"],"C-Level":["Chief","President"],
+    };
+    const senLevels = SENIORITY_ADJACENT_UI[form.seniority] || [form.seniority];
+    senLevels.slice(0,3).forEach(sen => {
+      strings.push({
+        label: `${form.role} · ${sen}`,
+        category: "Target Title",
+        dot: "#1da882",
+        tag: "intitle + seniority + skills",
+        queries: [
+          `site:${site} intitle:"${form.role}" ${sen}${skillHint}${locHint}`,
+        ],
+      });
+    });
+
+    // ── TIER 2: intitle:user's role + intitle:company + seniority + skills ─────
+    // Format: site:linkedin.com/in intitle:"Customer Success Manager" intitle:"Informatica" Senior "data governance"
+    companies.slice(0,6).forEach(co => {
+      const sen = senLevels[0];
+      strings.push({
+        label: co,
+        category: "Target Company",
+        dot: "#4d64d8",
+        tag: "intitle role + intitle company",
+        queries: [
+          `site:${site} intitle:"${form.role}" intitle:"${co}" ${sen}${skillHint}${locHint}`,
+          // Broader fallback — no intitle on company
+          `site:${site} intitle:"${form.role}" "${co}" ${sen}${skillHint}${locHint}`,
+        ],
+      });
+    });
+
+    // ── TIER 3: Per company — role only, then role + skill ─────────────────────
+    companies.slice(0,6).forEach(co => {
+      strings.push({
+        label: co,
+        category: "Target Company",
+        dot: "#4d64d8",
+        tag: "Company search",
+        queries: [
+          `site:${site} "${co}" "${form.role}"${locHint}`,
+          skill1
+            ? `site:${site} "${co}" "${form.role}" ${skill1}${locHint}`
+            : null,
+        ].filter(Boolean),
+      });
+    });
+
+    // ── TIER 4: Adjacent ───────────────────────────────────────────────────────
+    adjacent.slice(0,4).forEach(co => {
+      strings.push({
+        label: co,
+        category: "Adjacent Pool",
+        dot: "#9b6ef5",
+        tag: "Adjacent",
+        queries: [
+          `site:${site} "${co}" "${form.role}"${locHint}`,
+          skill1 ? `site:${site} "${co}" "${skill1}" ${form.seniority}${locHint}` : null,
+        ].filter(Boolean),
+      });
+    });
+
+    // ── TIER 5: Wildcards ──────────────────────────────────────────────────────
+    wildcards.slice(0,3).forEach(co => {
+      strings.push({
+        label: co,
+        category: "Wildcard",
+        dot: "#f6720d",
+        tag: "Wildcard",
+        queries: [
+          `site:${site} "${co}" "${form.role}"${locHint}`,
+          skill1 ? `site:${site} "${co}" "${skill1}"${locHint}` : null,
+        ].filter(Boolean),
+      });
+    });
+
+    return strings;
+  }
+
+  const strings = buildStrings();
+
+  function copy(text, id) {
+    navigator.clipboard.writeText(text);
+    setCopied(id);
+    setTimeout(()=>setCopied(null), 2000);
+  }
+
+  function openGoogle(q) {
+    window.open("https://www.google.com/search?q="+encodeURIComponent(q), "_blank");
+  }
+
+  const CAT_COLORS = {
+    "Target Company": {bg:"#eff2fe", text:"#4d64d8", border:"#d2d8f8"},
+    "Target Title":   {bg:"#f0fdf9", text:"#1da882", border:"#a7f3d0"},
+    "Adjacent Pool":  {bg:"#f5f3ff", text:"#7c3aed", border:"#ddd6fe"},
+    "Wildcard":       {bg:"#fff7ed", text:"#c2410c", border:"#fed7aa"},
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+        <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"#0891b2",boxShadow:"0 0 0 3px rgba(8,145,178,0.15)"}}/>
+        <span style={{fontSize:"11px",fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif"}}>X-Ray Search Strings</span>
+        <div style={{flex:1,height:"1px",background:"#f3f4f6"}}/>
+        <span style={{fontSize:"11px",color:"#9ca3af",fontFamily:"Inter,sans-serif"}}>{strings.length} strings</span>
+      </div>
+      <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"20px",fontFamily:"Inter,sans-serif"}}>
+        Ready-to-use Google X-ray strings. Click to open in Google or copy to clipboard.
+      </p>
+
+      <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+        {strings.map((group, gi) => {
+          const col = CAT_COLORS[group.category] || CAT_COLORS["Target Company"];
+          return (
+            <div key={gi} style={{background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",borderLeft:`3px solid ${group.dot}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",flexWrap:"wrap"}}>
+                <span style={{fontSize:"13px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif"}}>{group.label}</span>
+                <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",fontWeight:600,background:col.bg,color:col.text,border:`1px solid ${col.border}`,fontFamily:"Inter,sans-serif"}}>{group.category}</span>
+                {group.tag && <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",fontWeight:500,background:"#f3f4f6",color:"#6b7280",border:"1px solid #e5e7eb",fontFamily:"Inter,sans-serif"}}>{group.tag}</span>}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
+                {group.queries.map((q, qi) => (
+                  <div key={qi} style={{display:"flex",alignItems:"center",gap:"8px",background:"#f8fafc",borderRadius:"7px",padding:"8px 10px",border:"1px solid #e5e7eb"}}>
+                    <span style={{flex:1,fontSize:"12px",color:"#374151",fontFamily:"'JetBrains Mono',monospace",wordBreak:"break-all",lineHeight:1.5}}>{q}</span>
+                    <div style={{display:"flex",gap:"5px",flexShrink:0}}>
+                      <button type="button" onClick={()=>copy(q, `${gi}-${qi}`)}
+                        style={{padding:"5px 10px",borderRadius:"6px",fontSize:"11px",fontWeight:600,border:"1px solid #e5e7eb",background: copied===`${gi}-${qi}` ? "#f0fdf9" : "#ffffff",color: copied===`${gi}-${qi}` ? "#1da882" : "#6b7280",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap"}}>
+                        {copied===`${gi}-${qi}` ? "✓ Copied" : "Copy"}
+                      </button>
+                      <button type="button" onClick={()=>openGoogle(q)}
+                        style={{padding:"5px 10px",borderRadius:"6px",fontSize:"11px",fontWeight:600,border:"1px solid #4d64d8",background:"#4d64d8",color:"#ffffff",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap"}}>
+                        Search ↗
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{marginTop:"16px",padding:"12px 14px",background:"#f8fafc",borderRadius:"8px",border:"1px solid #e5e7eb"}}>
+        <div style={{fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"6px",fontFamily:"Inter,sans-serif"}}>💡 How to use</div>
+        <div style={{fontSize:"12px",color:"#6b7280",lineHeight:1.6,fontFamily:"Inter,sans-serif"}}>
+          Click <strong>Search ↗</strong> to open directly in Google, or <strong>Copy</strong> and paste into any browser. 
+          Results are LinkedIn profiles matching your criteria. Refine by adding skills or location to any string.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+const TABS = [
+  { id:"companies", label:"Companies",  dot:"#4d64d8", count:d=>d.companies?.length },
+  { id:"adjacent",  label:"Adjacent",   dot:"#9b6ef5", count:d=>d.adjacent?.length  },
+  { id:"wildcards", label:"Wildcards",  dot:"#f6720d", count:d=>d.wildcards?.length  },
+  { id:"titles",    label:"Titles",     dot:"#1da882", count:d=>d.titles?.length     },
+  { id:"candidates",label:"Candidates", dot:"#f04e7c", isNew:true },
+  { id:"xray",      label:"X-Ray",      dot:"#0891b2", isNew:true },
+];
+
+function ResultTabs({ mapData, form }) {
+  const [active, setActive] = useState("companies");
+  const nodes = {companies:mapData.companies,adjacent:mapData.adjacent,wildcards:mapData.wildcards,titles:mapData.titles};
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"24px",flexWrap:"wrap"}}>
+        {TABS.map(t=>{
+          const isActive = active===t.id;
+          return (
+          <button key={t.id} type="button" onClick={()=>setActive(t.id)}
+            style={{
+              display:"flex",alignItems:"center",gap:"6px",
+              padding:"7px 16px",
+              fontSize:"13px",fontWeight: isActive ? 600 : 500,
+              cursor:"pointer",
+              borderRadius:"999px",
+              color: isActive ? "#ffffff" : "#6b7280",
+              background: isActive ? t.dot : "#f3f4f6",
+              border: isActive ? `1.5px solid ${t.dot}` : "1.5px solid #e5e7eb",
+              outline:"none",
+              boxShadow: isActive ? `0 2px 8px ${t.dot}66` : "none",
+              transition:"background .15s, color .15s, box-shadow .15s",
+              fontFamily:"Inter,sans-serif",
+              whiteSpace:"nowrap",
+            }}>
+            <div style={{
+              width:"6px",height:"6px",borderRadius:"50%",flexShrink:0,
+              background: isActive ? "rgba(255,255,255,0.8)" : t.dot,
+            }}/>
+            {t.label}
+            {t.count && mapData && (
+              <span style={{
+                fontSize:"11px",fontWeight:700,
+                color: isActive ? "#ffffff" : t.dot,
+                background: isActive ? "rgba(255,255,255,0.22)" : t.dot+"18",
+                padding:"1px 6px",borderRadius:"999px",marginLeft:"2px",
+              }}>{t.count(mapData)}</span>
+            )}
+            {t.isNew && (
+              <span style={{
+                fontSize:"9px",padding:"2px 6px",borderRadius:"4px",
+                background: isActive ? "rgba(255,255,255,0.25)" : "#fddbe4",
+                color: isActive ? "#fff" : "#f34d77",
+                border: isActive ? "none" : "1px solid #f894ad",
+                fontWeight:700,marginLeft:"2px",
+              }}>NEW</span>
+            )}
+          </button>
+        );})}
+      </div>
+      {active==="candidates"
+        ? <CandidatesTab mapData={mapData} form={form}/>
+        : active==="xray"
+        ? <XRayTab mapData={mapData} form={form}/>
+        : <Section cat={active} nodes={nodes[active]}/>
+      }
+    </div>
+  );
+}
+
+// ─── Loading screen ───────────────────────────────────────────────────────────
+function LoadingScreen() {
+  const [step,setStep]=useState(0);
+  const steps=TABS.filter(t=>t.id!=="candidates");
+  useEffect(()=>{const iv=setInterval(()=>setStep(s=>(s+1)%steps.length),900);return()=>clearInterval(iv);},[]);
+  return (
+    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"28px"}}>
+
+      {/* Rotating compass */}
+      <div style={{position:"relative",width:"80px",height:"80px"}}>
+        {/* Outer ring — static */}
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" style={{position:"absolute",inset:0}}>
+          <circle cx="40" cy="40" r="36" stroke="#e5e7eb" strokeWidth="1.5"/>
+          <circle cx="40" cy="40" r="28" stroke="#e5e7eb" strokeWidth="0.5" opacity="0.5"/>
+          {/* Cardinal ticks */}
+          {[0,90,180,270].map(deg=>(
+            <line key={deg}
+              x1={40 + 33*Math.sin(deg*Math.PI/180)}
+              y1={40 - 33*Math.cos(deg*Math.PI/180)}
+              x2={40 + 36*Math.sin(deg*Math.PI/180)}
+              y2={40 - 36*Math.cos(deg*Math.PI/180)}
+              stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/>
+          ))}
+        </svg>
+
+        {/* Needle — rotating */}
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none"
+          style={{position:"absolute",inset:0,animation:"compassSpin 2s ease-in-out infinite"}}>
+          {/* North needle — blue */}
+          <polygon points="40,10 37,40 40,36 43,40" fill="#4d64d8"/>
+          {/* South needle — grey */}
+          <polygon points="40,70 37,40 40,44 43,40" fill="#d1d5db"/>
+          {/* Center pivot */}
+          <circle cx="40" cy="40" r="4" fill="#ffffff" stroke="#4d64d8" strokeWidth="2"/>
+          <circle cx="40" cy="40" r="1.5" fill="#4d64d8"/>
+        </svg>
+      </div>
+
+      {/* Steps */}
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:"11px",color:"#9ca3af",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:"14px",fontFamily:"Inter,sans-serif"}}>Mapping talent</div>
+        {steps.map((t,i)=>(
+          <div key={t.id} style={{
+            display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",
+            marginBottom:"6px",
+            opacity: i===step ? 1 : 0.2,
+            transition:"opacity 0.3s ease",
+          }}>
+            <div style={{width:"6px",height:"6px",borderRadius:"50%",background:t.dot,flexShrink:0,
+              boxShadow: i===step ? `0 0 6px ${t.dot}` : "none",
+              transition:"box-shadow 0.3s ease"}}/>
+            <span style={{
+              fontSize:"13px",fontWeight: i===step ? 600 : 400,
+              color: i===step ? t.dot : "#9ca3af",
+              fontFamily:"Inter,sans-serif",
+              transition:"color 0.3s ease",
+            }}>{t.label}</span>
           </div>
         ))}
       </div>
@@ -219,155 +793,115 @@ function LoadingScreen() {
   );
 }
 
-function AvatarFace({ thinking }) {
-  return (
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-      <circle cx="18" cy="18" r="17" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.5"/>
-      <line x1="18" y1="1" x2="18" y2="35" stroke="#38bdf8" strokeWidth="0.3" opacity="0.3"/>
-      <line x1="1" y1="18" x2="35" y2="18" stroke="#38bdf8" strokeWidth="0.3" opacity="0.3"/>
-      {thinking ? (
-        <>
-          <rect x="10" y="14" width="5" height="2" rx="1" fill="#38bdf8" opacity="0.9">
-            <animate attributeName="width" values="5;2;5" dur="1.2s" repeatCount="indefinite"/>
-          </rect>
-          <rect x="21" y="14" width="5" height="2" rx="1" fill="#38bdf8" opacity="0.9">
-            <animate attributeName="width" values="5;2;5" dur="1.2s" repeatCount="indefinite"/>
-          </rect>
-          <path d="M12 24 Q18 22 24 24" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.8">
-            <animate attributeName="d" values="M12 24 Q18 22 24 24;M12 23 Q18 25 24 23;M12 24 Q18 22 24 24" dur="1s" repeatCount="indefinite"/>
-          </path>
-        </>
-      ) : (
-        <>
-          <rect x="10" y="13" width="5" height="5" rx="1.5" fill="#38bdf8" opacity="0.9"/>
-          <rect x="21" y="13" width="5" height="5" rx="1.5" fill="#38bdf8" opacity="0.9"/>
-          <rect x="12" y="15" width="2" height="2" rx="0.5" fill="#0f172a"/>
-          <rect x="23" y="15" width="2" height="2" rx="0.5" fill="#0f172a"/>
-          <path d="M12 23 Q18 27 24 23" stroke="#38bdf8" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.8"/>
-        </>
-      )}
-      <line x1="18" y1="1" x2="18" y2="6" stroke="#38bdf8" strokeWidth="1.5"/>
-      <circle cx="18" cy="5" r="1.5" fill="#38bdf8">
-        <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
-      </circle>
-      <line x1="2" y1="16" x2="8" y2="16" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="5" y1="16" x2="5" y2="20" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="28" y1="16" x2="34" y2="16" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="31" y1="16" x2="31" y2="20" stroke="#38bdf8" strokeWidth="0.8" opacity="0.5"/>
-    </svg>
-  );
-}
-
-function renderMessage(text) {
-  const parts = text.split(/\*([^*]+)\*/g);
-  return parts.map((p, i) => i % 2 === 1
-    ? <strong key={i} className="text-sky-300 font-semibold">{p}</strong>
-    : <span key={i}>{p}</span>
-  );
-}
-
-function Chatbot() {
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    { role:"assistant", text:"Hey! I'm Compass, your SourcingCompass guide. Ask me anything about how the tool works, what the scores mean, or how to get better results!" }
-  ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior:"smooth" });
-  }, [messages]);
+// ─── Chatbot ──────────────────────────────────────────────────────────────────
+function Chatbot({ mapData, form }) {
+  const [open,setOpen]=useState(false);
+  const [messages,setMessages]=useState([{role:"assistant",text:"Hey! I'm Compass — ask me anything about how this tool works."}]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const bottomRef=useRef(null);
+  useEffect(()=>{bottomRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
 
   async function send() {
-    const q = input.trim();
-    if (!q || loading) return;
-    setInput("");
-    setMessages(m => [...m, { role:"user", text:q }]);
-    setLoading(true);
+    const q=input.trim(); if(!q||loading) return;
+    setInput(""); setMessages(m=>[...m,{role:"user",text:q}]); setLoading(true);
     try {
-      const history = messages.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text }));
-      const res = await fetch("/api/generate", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ messages:[{ role:"user", content:
-          "You are Compass, a friendly AI assistant for SourcingCompass. You have a slightly nerdy, helpful personality. Use only the following documentation to answer questions.\n\nRESPONSE RULES:\n- By default: answer in 2-3 short sentences max. Be direct and clear.\n- If the user asks to explain in detail, go deeper with bullet points and structure.\n- Bold key terms using *asterisks* when helpful.\n- Never use long paragraphs by default.\n- If the question is not about SourcingCompass, politely say you can only help with questions about the tool.\n\nDOCUMENTATION:\n" + DOC_CONTEXT + "\n\nConversation so far:\n" + history.map(h=>h.role+": "+h.content).join("\n") + "\n\nUser question: " + q
-        }]})
-      });
-      const data = await res.json();
-      const text = data.content?.map(b => b.text||"").join("").trim() || "Hmm, I couldn't get a response. Try again!";
-      setMessages(m => [...m, { role:"assistant", text }]);
-    } catch(e) {
-      setMessages(m => [...m, { role:"assistant", text:"Something went wrong. Please try again!" }]);
-    }
+      const history=messages.map(m=>({role:m.role==="assistant"?"assistant":"user",content:m.text}));
+      // Build live map context so chatbot can explain specific cards
+      let mapContext = "";
+      if (mapData) {
+        const co = (mapData.companies||[]).map(c=>`  - ${c.label} (Relevance:${c.confidence}, Density:${c.talentDensity}, Poachability:${c.poachability}, Stage:${c.stage||"?"}) — ${c.whyRelevant||""} Signals: ${(c.poachabilitySignals||[]).join("; ")}`).join("\n");
+        const adj = (mapData.adjacent||[]).map(c=>`  - ${c.label}: ${c.sub||""}`).join("\n");
+        const wc  = (mapData.wildcards||[]).map(c=>`  - ${c.label}: ${c.sub||""}`).join("\n");
+        const ti  = (mapData.titles||[]).map(t=>`  - ${t.label}`).join("\n");
+        mapContext = `\n\nCURRENT MAP (role: ${form?.role||"?"}, seniority: ${form?.seniority||"?"}, location: ${form?.location||"?"}, skills: ${(form?.skills||[]).join(", ")||"none"}):
+TARGET COMPANIES:\n${co||"  none"}
+ADJACENT POOLS:\n${adj||"  none"}
+WILDCARDS:\n${wc||"  none"}
+TARGET TITLES:\n${ti||"  none"}
+Use this data to give specific, contextual answers about the current map.`;
+      }
+
+      const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({messages:[{role:"user",content:"You are Compass, an expert guide embedded inside SourcingCompass. Answer in 2-4 sentences. Be specific — reference actual companies, scores, and signals from the current map when relevant.\n\nDOCS:\n"+DOC_CONTEXT+mapContext+"\n\nHistory:\n"+history.map(h=>h.role+": "+h.content).join("\n")+"\n\nQ: "+q}]})});
+      const data=await res.json();
+      const text=data.content?.map(b=>b.text||"").join("").trim()||"Couldn't get a response.";
+      setMessages(m=>[...m,{role:"assistant",text}]);
+    } catch {setMessages(m=>[...m,{role:"assistant",text:"Something went wrong."}]);}
     setLoading(false);
   }
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(v => !v)}
-        className="fixed bottom-6 right-6 z-50 transition-all hover:scale-110"
-        style={{filter: open ? "drop-shadow(0 0 12px #38bdf8)" : "drop-shadow(0 0 6px #38bdf888)"}}>
-        {open
-          ? <div className="w-12 h-12 rounded-full bg-slate-900 border-2 border-sky-400 flex items-center justify-center text-sky-400 text-xl font-bold" style={{boxShadow:"0 0 16px #38bdf888"}}>x</div>
-          : <AvatarFace thinking={false}/>
-        }
+      {/* Floating trigger button — always visible */}
+      <button type="button" onClick={()=>setOpen(v=>!v)}
+        style={{
+          position:"fixed",bottom:"20px",right:"20px",zIndex:1000,
+          width:"48px",height:"48px",borderRadius:"50%",
+          background: open ? "#374151" : "#4d64d8",
+          border:"none",cursor:"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          boxShadow:"0 4px 16px rgba(77,100,216,0.45)",
+          transition:"all .2s",fontFamily:"Inter,sans-serif",
+          color:"#ffffff",fontSize:"20px",fontWeight:600,
+        }}>
+        {open ? "×" : "✦"}
       </button>
+
+      {/* Chat panel — positioned above button, won't overlap content */}
       {open && (
-        <div className="fixed bottom-20 right-6 z-50 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col overflow-hidden"
-          style={{height:"440px",boxShadow:"0 0 40px #38bdf822"}}>
-          <div className="px-4 py-3 border-b border-slate-700/50 flex items-center gap-3 bg-slate-800/50">
-            <AvatarFace thinking={loading}/>
+        <div style={{
+          position:"fixed",bottom:"78px",right:"20px",zIndex:999,
+          width:"300px",height:"420px",
+          background:"#ffffff",
+          border:"1px solid #e5e7eb",
+          borderRadius:"14px",
+          boxShadow:"0 16px 48px rgba(0,0,0,0.15)",
+          display:"flex",flexDirection:"column",
+          overflow:"hidden",
+          fontFamily:"Inter,sans-serif",
+        }}>
+          {/* Header */}
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #f3f4f6",display:"flex",alignItems:"center",gap:"10px",background:"#fafafa"}}>
+            <div style={{width:"32px",height:"32px",borderRadius:"50%",background:"#4d64d8",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"12px",fontWeight:700,flexShrink:0}}>C</div>
             <div>
-              <div className="text-xs font-bold text-sky-400 tracking-widest uppercase">Compass</div>
-              <div className="text-[10px] text-slate-500">{loading ? "Thinking..." : "SourcingCompass Guide"}</div>
+              <div style={{fontSize:"13px",fontWeight:600,color:"#111827"}}>Compass</div>
+              <div style={{fontSize:"11px",color:"#9ca3af"}}>{loading?"Thinking...":"SourcingCompass guide"}</div>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start gap-2 items-end"}>
-                {m.role === "assistant" && <div className="flex-shrink-0 mb-0.5"><AvatarFace thinking={false}/></div>}
-                <div className={"max-w-[80%] rounded-lg px-3 py-2 text-[11px] leading-relaxed " +
-                  (m.role === "user"
-                    ? "bg-sky-600/80 text-white rounded-br-none"
-                    : "bg-slate-800 text-slate-300 border border-slate-700/60 rounded-bl-none")}>
-                  {renderMessage(m.text)}
+
+          {/* Messages */}
+          <div style={{flex:1,overflowY:"auto",padding:"12px",display:"flex",flexDirection:"column",gap:"8px"}}>
+            {messages.map((m,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+                <div style={{
+                  maxWidth:"82%",borderRadius:"12px",padding:"8px 12px",
+                  fontSize:"12px",lineHeight:1.5,
+                  background: m.role==="user" ? "#4d64d8" : "#f3f4f6",
+                  color: m.role==="user" ? "#ffffff" : "#374151",
+                }}>
+                  {m.text}
                 </div>
               </div>
             ))}
             {loading && (
-              <div className="flex justify-start gap-2 items-end">
-                <AvatarFace thinking={true}/>
-                <div className="bg-slate-800 border border-slate-700/60 rounded-lg rounded-bl-none px-3 py-2.5">
-                  <div className="flex gap-1">
-                    {[0,1,2].map(i => (
-                      <div key={i} className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-bounce" style={{animationDelay:i*0.15+"s"}}/>
-                    ))}
-                  </div>
+              <div style={{display:"flex",justifyContent:"flex-start"}}>
+                <div style={{background:"#f3f4f6",borderRadius:"12px",padding:"10px 14px",display:"flex",gap:"4px",alignItems:"center"}}>
+                  {[0,1,2].map(i=><div key={i} className="sc-spinner" style={{width:"6px",height:"6px",borderRadius:"50%",background:"#4d64d8",animation:`bounce ${0.6+i*0.1}s ease-in-out infinite alternate`}}/>)}
                 </div>
               </div>
             )}
             <div ref={bottomRef}/>
           </div>
-          {messages.length === 1 && (
-            <div className="px-3 pb-2 flex flex-wrap gap-1">
-              {["What is poachability?","How do I use the JD parser?","What's a wildcard bet?"].map(q => (
-                <button key={q} type="button" onClick={() => setInput(q)}
-                  className="text-[9px] px-2 py-1 rounded border border-slate-700 text-slate-500 hover:text-sky-400 hover:border-sky-700 transition-all">
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="px-3 py-3 border-t border-slate-700/50 flex gap-2">
+
+          {/* Input */}
+          <div style={{padding:"10px 12px",borderTop:"1px solid #f3f4f6",display:"flex",gap:"8px",background:"#fafafa"}}>
             <input
-              className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-              placeholder="Ask Compass anything..."
-              value={input} onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && send()}/>
-            <button type="button" onClick={send} disabled={loading || !input.trim()}
-              className="px-3 py-1.5 rounded bg-sky-500 hover:bg-sky-400 text-slate-900 text-xs font-bold disabled:opacity-40">
-              →
-            </button>
+              style={{flex:1,background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:"8px",padding:"7px 12px",fontSize:"12px",color:"#111827",outline:"none",fontFamily:"Inter,sans-serif"}}
+              placeholder="Ask anything..." value={input}
+              onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}/>
+            <button type="button" onClick={send} disabled={loading||!input.trim()}
+              style={{padding:"7px 12px",borderRadius:"8px",background:"#4d64d8",color:"#fff",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:600,opacity:loading||!input.trim()?0.3:1,fontFamily:"Inter,sans-serif"}}>→</button>
           </div>
         </div>
       )}
@@ -375,224 +909,302 @@ function Chatbot() {
   );
 }
 
+// ─── Prompt builder ───────────────────────────────────────────────────────────
 function buildPrompt(form) {
   return [
-    "You are a talent intelligence system. Return a structured talent map as JSON only. No markdown, no explanation, no backticks.",
+    "You are a talent intelligence system. Return structured JSON only. No markdown, no backticks, no explanation.",
+    "Role: "+form.role+" | Hiring Company: "+form.company+" | Location: "+form.location+" | Seniority: "+form.seniority+" | Skills: "+form.skills.join(", "),
+    "Industries: "+(form.industries.join(", ")||"Any")+" | Exclusions: "+(form.exclusions.join(", ")||"None"),
     "",
-    "CRITICAL: Every company you suggest MUST be a real company that exists today. Do NOT invent community groups, open source projects, contributor pools, or spin-off descriptions. Only suggest actual incorporated companies.",
-    "CRITICAL: Location is " + (form.location || "not specified") + ". ONLY suggest companies with an actual engineering office or significant engineering team in " + (form.location || "the specified location") + ". For India, focus on Indian product companies, Indian unicorns, and global companies with large India engineering teams.",
+    "CRITICAL RULES:",
+    "1. companies — ONLY use company names that appear in the VERIFIED COMPANY LIST below. Do NOT invent company names. Do NOT use open source projects, frameworks, or tools (Apache Kafka, Spark, dbt are tools NOT companies). Pick 6 companies.",
+    "2. adjacent — 4 real hireable companies with transferable skills. Must be real companies people work at, not foundations or communities.",
+    "3. wildcards — 3 real companies a recruiter would never think of. BANNED: Airbnb, Netflix, Uber, Meta, Google, Amazon, Apple, Microsoft, Stripe. Think gaming, fintech infra, developer tools.",
+    "4. titles — 5-7 real job title strings as they actually appear on LinkedIn profiles. Research all common alternative titles for this specific role — different companies use different naming conventions. Include seniority variants, functional variants, and industry-specific naming. Examples for Customer Success Manager: Senior Customer Success Manager, Enterprise Customer Success Manager, Strategic Customer Success Manager, Client Success Manager, Customer Success Lead, Account Manager. Examples for Staff Engineer: Staff Software Engineer, Principal Engineer, Senior Staff Engineer. To combine similar titles use: '\"Senior Customer Success Manager\" OR \"Enterprise Customer Success Manager\"'. Always think: what would this person's LinkedIn title actually say?",
     "",
-    "Role: " + form.role,
-    "Hiring Company: " + form.company,
-    "Location: " + form.location,
-    "Seniority: " + form.seniority,
-    "Skills: " + form.skills.join(", "),
-    "Preferred Industries: " + (form.industries.join(", ") || "Any"),
-    "Exclusions: " + (form.exclusions.join(", ") || "None"),
+    "For poachabilitySignals: 2-3 signals prefixed [Confirmed] or [Signal]. One clear sentence each.",
+    "For likelyProfile: 1-2 sentences on who works there in this role.",
+    "For whyRelevant: 1 sentence on why good sourcing target.",
+    "For sub in adjacent/wildcards: 1-2 sentences on skill overlap.",
     "",
-    "Return this JSON:",
-    "{\"companies\":[{\"id\":\"c1\",\"label\":\"Name\",\"sub\":\"Industry\",\"tags\":[\"t\"],\"confidence\":85,\"stage\":\"Series B\",\"talentDensity\":78,\"poachability\":65,\"likelyProfile\":\"sentence.\",\"poachabilitySignals\":[\"[Signal] x\",\"[Confirmed] y\"],\"whyRelevant\":\"sentence.\"}],\"adjacent\":[{\"id\":\"a1\",\"label\":\"Name\",\"sub\":\"Why\",\"tags\":[\"t\"]}],\"wildcards\":[{\"id\":\"w1\",\"label\":\"Name\",\"sub\":\"Reason\",\"tags\":[\"t\"]}],\"titles\":[{\"id\":\"t1\",\"label\":\"Title\",\"sub\":\"Companies\",\"tags\":[\"t\"],\"confidence\":90}]}",
-    "",
-    "Rules:",
-    "- 6-8 companies (mix of established AND 3-4 startups)",
-    "- NEVER include " + form.company + " in results",
-    "- Only real companies with engineering presence in " + (form.location || "the specified location"),
-    "- adjacent = 4-5 specific companies with transferable skills, not job titles",
-    "- wildcards = 3-4 unconventional TECH companies only (not banks, manufacturers, or conglomerates)",
-    "- titles = 5-7 exact job titles as on real postings",
-    "- confidence/talentDensity/poachability = 0-100",
-    "- poachabilitySignals = 2-3 strings prefixed [Signal] or [Confirmed]",
-    "- stage = Public / Late Stage / Series C+ / Series B / Series A / Seed / Enterprise",
-    "- Return ONLY raw valid JSON.",
+    'Return this JSON structure:',
+    '{"companies":[{"id":"c1","label":"Snowflake","sub":"Cloud Data Platform","tags":["data-lake","cloud"],"confidence":92,"stage":"Public","talentDensity":88,"poachability":72,"likelyProfile":"Staff engineers building distributed query engines and data pipeline infrastructure at scale.","poachabilitySignals":["[Confirmed] Announced 20% headcount reduction in Q4 2024.","[Signal] Slower career progression at senior IC levels post-IPO."],"whyRelevant":"Core product is a data platform — engineers work on identical problems to this role."}],"adjacent":[{"id":"a1","label":"Tableau","sub":"BI engineers understand data modelling and query optimisation — transfers directly to a data catalog role.","tags":["bi","visualisation"]}],"wildcards":[{"id":"w1","label":"Riot Games","sub":"Handles 1B+ game events per day with Kafka and Flink — same real-time data infrastructure problems, far less competed for.","tags":["gaming","real-time"]}],"titles":[{"id":"t1","label":"Staff Engineer","confidence":90},{"id":"t2","label":"Principal Engineer","confidence":88},{"id":"t3","label":"\"Staff Data Engineer\" OR \"Principal Data Engineer\"","confidence":85}]}',
+    "Return ONLY raw valid JSON. No text before or after.",
   ].join("\n");
 }
 
-const EMPTY = { companies:[], adjacent:[], wildcards:[], titles:[] };
+const EMPTY={companies:[],adjacent:[],wildcards:[],titles:[]};
+const LOCATIONS=["United States","Canada","India","United Kingdom","Europe","Australia","Singapore"];
 
+// ─── Resizable sidebar ────────────────────────────────────────────────────────
+function ResizableSidebar({children}) {
+  const [width,setWidth]=useState(280);
+  const dragging=useRef(false); const startX=useRef(0); const startW=useRef(0);
+  function onMouseDown(e){dragging.current=true;startX.current=e.clientX;startW.current=width;document.body.style.cursor="col-resize";document.body.style.userSelect="none";}
+  useEffect(()=>{
+    function onMouseMove(e){if(!dragging.current)return;setWidth(Math.min(480,Math.max(220,startW.current+(e.clientX-startX.current))));}
+    function onMouseUp(){if(!dragging.current)return;dragging.current=false;document.body.style.cursor="";document.body.style.userSelect="";}
+    window.addEventListener("mousemove",onMouseMove); window.addEventListener("mouseup",onMouseUp);
+    return()=>{window.removeEventListener("mousemove",onMouseMove);window.removeEventListener("mouseup",onMouseUp);};
+  },[]);
+  return (
+    <div style={{width,flexShrink:0,position:"relative",background:"#1a1f3c",borderRight:"1px solid #2d3461"}} className="flex flex-col z-10">
+      {children}
+      <div onMouseDown={onMouseDown} className="absolute top-0 right-0 w-1 h-full cursor-col-resize group z-20">
+        <div className="absolute top-0 right-0 w-1 h-full transition-all group-hover:bg-sidebar-accent/30"/>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main app ─────────────────────────────────────────────────────────────────
 export default function TalentMap() {
-  const [form, setForm] = useState({ role:"", company:"", location:"", seniority:"Senior", skills:[], industries:[], exclusions:[] });
-  const [mapData, setMapData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [parsing, setParsing] = useState(false);
-  const [error, setError] = useState("");
-  const [generated, setGenerated] = useState(false);
-  const [showJD, setShowJD] = useState(false);
-  const jdRef = useRef(null);
-  const set = (k, v) => setForm(f => ({...f, [k]:v}));
-  const allNodes = mapData ? [...mapData.companies,...mapData.adjacent,...mapData.wildcards,...mapData.titles] : [];
+  const [form,setForm]=useState({role:"",company:"",location:"United States",seniority:"Senior",skills:[],industries:[],exclusions:[]});
+  const [mapData,setMapData]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [parsing,setParsing]=useState(false);
+  const [error,setError]=useState("");
+  const [generated,setGenerated]=useState(false);
+  const [showJD,setShowJD]=useState(false);
+  const jdRef=useRef(null);
+  const generateAbortRef=useRef(null);
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const allNodes=mapData?[...mapData.companies,...mapData.adjacent,...mapData.wildcards,...mapData.titles]:[];
 
   async function parseJD() {
-    const txt = jdRef.current?.value || "";
-    if (!txt.trim()) return;
+    const txt=jdRef.current?.value||""; if(!txt.trim()) return;
     setParsing(true); setError("");
     try {
-      const res = await fetch("/api/generate", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ messages:[{ role:"user", content:"Extract from this job description and return ONLY raw valid JSON, no markdown: {\"role\":\"exact job title\",\"seniority\":\"Junior/Mid/Senior/Staff/Principal/Director/VP\",\"skills\":[\"skill1\",\"skill2\"]} Job Description: " + txt.slice(0,2000) }] })
-      });
-      const data = await res.json();
-      const raw = data.content?.map(b => b.text||"").join("").trim();
-      let clean = raw.replace(/```json|```/g,"").trim();
-      // Find the last complete JSON object by trimming at the last closing brace
-      const lastBrace = clean.lastIndexOf("}");
-      if (lastBrace !== -1) clean = clean.slice(0, lastBrace + 1);
-      const parsed = JSON.parse(clean);
-      setForm(f => ({...f, role:parsed.role||f.role, seniority:parsed.seniority||f.seniority, skills:parsed.skills?.length?parsed.skills:f.skills}));
+      const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({messages:[{role:"user",content:'Extract from JD, return ONLY raw JSON: {"role":"title","seniority":"Senior/Staff/etc","skills":["s1"]} JD: '+txt.slice(0,2000)}]})});
+      const data=await res.json();
+      const raw=data.content?.map(b=>b.text||"").join("").trim();
+      let clean=raw.replace(/```json|```/g,"").trim();
+      const lb=clean.lastIndexOf("}"); if(lb!==-1) clean=clean.slice(0,lb+1);
+      const parsed=JSON.parse(clean);
+      setForm(f=>({...f,role:parsed.role||f.role,seniority:parsed.seniority||f.seniority,skills:parsed.skills?.length?parsed.skills:f.skills}));
       setShowJD(false);
-    } catch(e) { setError("JD parse failed: " + e.message); }
+    } catch(e){setError("JD parse failed: "+e.message);}
     setParsing(false);
   }
 
+  function stopGenerate(){if(generateAbortRef.current)generateAbortRef.current.abort();setLoading(false);}
+
   async function generate() {
-    if (!form.role.trim()) { setError("Role is required."); return; }
+    if(!form.role.trim()){setError("Role title is required.");return;}
+    if(generateAbortRef.current) generateAbortRef.current.abort();
+    generateAbortRef.current=new AbortController();
     setError(""); setLoading(true); setMapData(null);
     try {
-      const res = await fetch("/api/generate", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ messages:[{ role:"user", content:buildPrompt(form) }] })
-      });
-      const data = await res.json();
-      if (!res.ok) { setError("API error " + res.status + ": " + JSON.stringify(data)); setLoading(false); return; }
-      const raw = data.content?.map(b => b.text||"").join("").trim();
-      const parsed = JSON.parse(raw.replace(/```json|```/g,"").trim());
-      setMapData({...EMPTY,...parsed});
-      setGenerated(true);
-    } catch(e) { setError("Error: " + e.message); }
+      const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},
+        signal:generateAbortRef.current.signal,
+        body:JSON.stringify({messages:[{role:"user",content:buildPrompt(form)}]})});
+      const data=await res.json();
+      if(!res.ok){setError("API error "+res.status+": "+JSON.stringify(data));setLoading(false);return;}
+      const raw=data.content?.map(b=>b.text||"").join("").trim();
+      const parsed=JSON.parse(raw.replace(/```json|```/g,"").trim());
+      setMapData({...EMPTY,...parsed}); setGenerated(true);
+    } catch(e){if(e.name!=="AbortError")setError("Error: "+e.message);}
     setLoading(false);
   }
 
   function exportCSV() {
-    const rows = [["Section","Company/Title","Stage","Relevance","Talent Density","Poachability","Likely Profile","Poachability Signals","Why Relevant","Tags"]];
-    mapData.companies.forEach(n => rows.push(["Target Company",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
-    mapData.adjacent.forEach(n => rows.push(["Adjacent Pool",n.label,"","","","","","","",(n.tags||[]).join(", ")]));
-    mapData.wildcards.forEach(n => rows.push(["Wildcard Bet",n.label,"","","","","","","",(n.tags||[]).join(", ")]));
-    mapData.titles.forEach(n => rows.push(["Target Title",n.label,"",n.confidence||"","","","","","",(n.tags||[]).join(", ")]));
-    const csv = rows.map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(",")).join("\n");
-    const blob = new Blob([csv],{type:"text/csv"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href=url; a.download="SourcingCompass_"+form.role.replace(/\s+/g,"_")+".csv";
-    a.click(); URL.revokeObjectURL(url);
+    const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Profile","Signals","Why","Tags"]];
+    mapData.companies.forEach(n=>rows.push(["Target",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
+    mapData.adjacent.forEach(n=>rows.push(["Adjacent",n.label,"","","","","","","",(n.tags||[]).join(", ")]));
+    mapData.wildcards.forEach(n=>rows.push(["Wildcard",n.label,"","","","","","","",(n.tags||[]).join(", ")]));
+    mapData.titles.forEach(n=>rows.push(["Title",n.label,"",n.confidence||"","","","","","",(n.tags||[]).join(", ")]));
+    const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(",")).join("\n");
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download="SourcingCompass_"+form.role.replace(/\s+/g,"_")+".csv"; a.click();
   }
 
+  const inputCls = "sidebar-input w-full rounded-md px-3 py-2 text-sm focus:outline-none transition-colors";
+  const inputStyle = {background:"#1e2449",border:"1px solid #2d3461",color:"#bfc8d6"};
+  const labelCls = ""; const labelStyle = {display:"block",fontSize:"12px",fontWeight:500,color:"#8892b0",marginBottom:"6px",letterSpacing:"0.02em",fontFamily:"Inter,sans-serif"};
+
   return (
-    <div className="flex h-screen bg-slate-950 font-mono overflow-hidden">
-      <div className="w-[30%] min-w-[260px] border-r border-slate-700/60 flex flex-col bg-slate-900/90 z-10">
-        <div className="px-5 pt-5 pb-4 border-b border-slate-700/50">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-3 h-3 rounded-sm bg-sky-400" style={{boxShadow:"0 0 8px #38bdf8"}}/>
-            <span className="text-sky-400 text-xs font-bold tracking-[0.25em] uppercase">SourcingCompass</span>
+    <>
+    <style>{`
+      .sidebar-input::placeholder { color: #4a5a8a !important; opacity: 1; }
+      .sidebar-input { color: #bfc8d6 !important; }
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      .sc-spinner { animation: spin 0.8s linear infinite; }
+      @keyframes compassSpin {
+        0%   { transform: rotate(0deg); }
+        20%  { transform: rotate(200deg); }
+        40%  { transform: rotate(170deg); }
+        60%  { transform: rotate(365deg); }
+        80%  { transform: rotate(350deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+    <div className="flex h-screen overflow-hidden" style={{background:"#f0f4f8"}}>
+
+      {/* ── Sidebar ── */}
+      <ResizableSidebar>
+
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4" style={{borderBottom:"1px solid #2d3461"}}>
+          <div className="flex items-center gap-3">
+            {/* Logo — teal rounded square with compass arrow, matching screenshot */}
+            <div className="flex-shrink-0" style={{width:"40px",height:"40px",borderRadius:"10px",background:"#132d35",border:"1.5px solid rgba(36,201,160,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Outer circle */}
+                <circle cx="12" cy="12" r="9" stroke="#24c9a0" strokeWidth="1.5" fill="none"/>
+                {/* Inner circle */}
+                <circle cx="12" cy="12" r="5.5" stroke="#24c9a0" strokeWidth="1" fill="none" opacity="0.5"/>
+                {/* Compass needle — pointing top-right */}
+                <polygon points="12,4.5 10.5,12 12,11 13.5,12" fill="#24c9a0"/>
+                <polygon points="12,19.5 10.5,12 12,13 13.5,12" fill="rgba(36,201,160,0.35)"/>
+                <circle cx="12" cy="12" r="1.5" fill="#132d35" stroke="#24c9a0" strokeWidth="1"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-[15px] font-bold text-white leading-tight tracking-tight">SourcingCompass</div>
+              <div className="text-[10px] font-semibold tracking-[0.15em] uppercase mt-0.5" style={{color:"#24c9a0"}}>Talent Intelligence</div>
+            </div>
           </div>
-          <div className="text-[10px] text-slate-500 tracking-wider">Talent Intelligence System</div>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Role Title</label>
-              <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                placeholder="e.g. Staff Engineer" value={form.role} onChange={e => set("role",e.target.value)}/>
-            </div>
-            <div className="flex-1">
-              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Hiring Company</label>
-              <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                placeholder="e.g. Atlan" value={form.company} onChange={e => set("company",e.target.value)}/>
-            </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={labelCls} style={labelStyle}>Role Title</label>
+              <input className={inputCls} style={inputStyle} placeholder="e.g. Staff Engineer" value={form.role} onChange={e=>set("role",e.target.value)}/></div>
+            <div><label className={labelCls} style={labelStyle}>Company</label>
+              <input className={inputCls} style={inputStyle} placeholder="e.g. Atlan" value={form.company} onChange={e=>set("company",e.target.value)}/></div>
           </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Location</label>
-              <input className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500"
-                placeholder="e.g. North America" value={form.location} onChange={e => set("location",e.target.value)}/>
-            </div>
-            <div className="flex-1">
-              <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Seniority</label>
-              <select className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                value={form.seniority} onChange={e => set("seniority",e.target.value)}>
-                {["Junior","Mid","Senior","Staff","Principal","Director","VP"].map(s => <option key={s}>{s}</option>)}
-              </select>
-            </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={labelCls} style={labelStyle}>Location</label>
+              <select className={inputCls} style={inputStyle} value={form.location} onChange={e=>set("location",e.target.value)}>
+                {LOCATIONS.map(l=><option key={l}>{l}</option>)}
+              </select></div>
+            <div><label className={labelCls} style={labelStyle}>Seniority</label>
+              <select className={inputCls} style={inputStyle} value={form.seniority} onChange={e=>set("seniority",e.target.value)}>
+                {["Intern","Junior","Mid-Level","Senior","Lead","Staff","Principal","Manager","Senior Manager","Director","Senior Director","VP","SVP","C-Level"].map(s=><option key={s}>{s}</option>)}
+              </select></div>
           </div>
-          <div>
-            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Must-Have Skills</label>
-            <TagInput placeholder="Type skill, press , or Enter" tags={form.skills} onChange={v => set("skills",v)}/>
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Preferred Industries</label>
-            <TagInput placeholder="e.g. Fintech, Data" tags={form.industries} onChange={v => set("industries",v)}/>
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-400 tracking-widest uppercase mb-1">Exclusions</label>
-            <TagInput placeholder="Companies or industries to skip" tags={form.exclusions} onChange={v => set("exclusions",v)}/>
-          </div>
-          <div>
-            <button type="button" onClick={() => setShowJD(v => !v)}
-              className="text-[10px] text-sky-500 hover:text-sky-300 tracking-widest uppercase">
-              {showJD ? "Hide" : "Paste"} Job Description
-            </button>
-            {showJD && (
-              <div className="mt-2 space-y-2">
-                <textarea ref={jdRef} rows={6}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none"
-                  placeholder="Paste your JD here..."/>
-                <button type="button" onClick={parseJD} disabled={parsing}
-                  className="w-full py-2 rounded text-xs font-bold tracking-widest uppercase bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40">
-                  {parsing ? "Parsing..." : "Parse JD — Auto-fill Fields"}
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="text-[9px] text-slate-600 bg-slate-800/50 border border-slate-700 rounded px-3 py-2">
-            AI-generated results. Verify companies before sourcing.
-          </div>
-          {error && <div className="text-[11px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2">{error}</div>}
-          <button type="button" onClick={generate} disabled={loading}
-            className="w-full py-2.5 rounded text-xs font-bold tracking-widest uppercase bg-sky-500 hover:bg-sky-400 text-slate-900 disabled:opacity-50"
-            style={{boxShadow:loading?"none":"0 0 12px #38bdf855"}}>
-            {loading ? "Generating..." : "Generate Map"}
+
+          <div><label className={labelCls} style={labelStyle}>Must-Have Skills</label>
+            <TagInput placeholder="Type skill, press , or Enter" tags={form.skills} onChange={v=>set("skills",v)}/></div>
+
+          <div><label className={labelCls} style={labelStyle}>Industries</label>
+            <TagInput placeholder="e.g. Fintech, Data" tags={form.industries} onChange={v=>set("industries",v)}/></div>
+
+          <div><label className={labelCls} style={labelStyle}>Exclusions</label>
+            <TagInput placeholder="Companies to skip" tags={form.exclusions} onChange={v=>set("exclusions",v)}/></div>
+
+          <button type="button" onClick={()=>setShowJD(v=>!v)}
+            className="text-xs font-medium text-left transition-colors" style={{color:"#24c9a0"}}>
+            + {showJD?"Hide":"Paste"} Job Description
           </button>
-        </div>
-        <div className="px-5 py-4 border-t border-slate-700/50 space-y-2">
-          <div className="text-[9px] text-slate-600 tracking-widests uppercase mb-2">Legend</div>
-          {Object.entries(CAT).map(([k,s]) => (
-            <div key={k} className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:s.dot}}/>
-              <span className="text-[10px] text-slate-500">{s.label}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-2 pt-1">
-            <div className="w-4 border-t border-dashed border-sky-400"/>
-            <span className="text-[10px] text-slate-500">Hover companies for context</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex-1 relative overflow-y-auto">
-        <BlueprintGrid/>
-        {!generated && !loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-8">
-            <div className="text-slate-700 text-4xl mb-4">+</div>
-            <div className="text-slate-500 text-xs tracking-widest uppercase">Configure inputs and hit Generate Map</div>
-            <div className="text-slate-700 text-[10px] mt-2">AI-powered talent intelligence will populate here</div>
-          </div>
-        )}
-        {loading && <LoadingScreen/>}
-        {mapData && !loading && (
-          <div className="relative z-10 p-8">
-            <div className="mb-6 pb-4 border-b border-slate-700/50 flex items-start justify-between gap-4">
-              <div>
-                <div className="text-slate-300 text-sm font-bold tracking-widest uppercase">{form.role} · {form.seniority}</div>
-                <div className="text-slate-500 text-xs mt-1">{[form.company,form.location].filter(Boolean).join(" · ")}</div>
-                <div className="text-[10px] text-slate-600 mt-2">{allNodes.length} nodes mapped</div>
-              </div>
-              <button type="button" onClick={exportCSV}
-                className="flex-shrink-0 py-2 px-3 rounded text-xs font-bold tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white">
-                CSV
+          {showJD && (
+            <div className="flex flex-col gap-2">
+              <textarea ref={jdRef} rows={5} className={inputCls+" resize-none"} style={inputStyle} placeholder="Paste JD here..."/>
+              <button type="button" onClick={parseJD} disabled={parsing}
+                className="w-full py-2 rounded-md text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-40 transition-all">
+                {parsing?"Parsing...":"Parse JD — auto-fill fields"}
               </button>
             </div>
-            <ResultTabs mapData={mapData}/>
+          )}
+
+          <p style={{fontSize:"11px",color:"#4a5a8a"}}>AI-generated · verify before sourcing</p>
+
+          {error && <div style={{fontSize:"11px",color:"#f87171",background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:"6px",padding:"8px 10px",fontFamily:"Inter,sans-serif"}}>{error}</div>}
+
+          {!loading ? (
+            <button type="button" onClick={generate}
+              style={{width:"100%",padding:"11px 16px",borderRadius:"8px",fontSize:"14px",fontWeight:600,color:"white",border:"none",cursor:"pointer",background:"#4d64d8",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",boxShadow:"0 4px 12px rgba(77,100,216,0.4)",fontFamily:"Inter,sans-serif"}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+              Generate Map
+            </button>
+          ) : (
+            <div style={{display:"flex",gap:"8px"}}>
+              <div style={{flex:1,padding:"11px",borderRadius:"8px",fontSize:"12px",fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:"8px",background:"#1e2449",color:"#4a5a8a",fontFamily:"Inter,sans-serif"}}>
+                <div className="sc-spinner" style={{width:"14px",height:"14px",border:"2px solid #24c9a0",borderTopColor:"transparent",borderRadius:"50%"}}/>
+                Generating...
+              </div>
+              <button type="button" onClick={stopGenerate}
+                style={{display:"flex",alignItems:"center",gap:"6px",padding:"8px 14px",borderRadius:"8px",fontSize:"11px",fontWeight:600,border:"1px solid rgba(239,68,68,0.4)",color:"#f87171",background:"none",cursor:"pointer",fontFamily:"Inter,sans-serif",flexShrink:0}}>
+                <div style={{width:"6px",height:"6px",borderRadius:"2px",background:"#ef4444"}}/>Stop
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Legend */}
+        <div className="px-5 py-4 flex flex-col gap-1.5" style={{borderTop:"1px solid #2d3461"}}>
+          <div style={{fontSize:"10px",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.1em",color:"#4a5a8a",marginBottom:"8px"}}>Legend</div>
+          {Object.entries(CAT).map(([k,s])=>(
+            <div key={k} className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:s.dot}}/>
+              <span style={{fontSize:"11px",color:"#8892b0"}}>{s.label}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:"hsl(340 82% 60%)"}}/>
+            <span style={{fontSize:"11px",color:"#8892b0"}}>Candidates</span>
+          </div>
+        </div>
+      </ResizableSidebar>
+
+      {/* ── Canvas ── */}
+      <div className="flex-1 relative overflow-y-auto min-w-0" style={{background:"#f0f4f8",overflowX:"visible"}}>
+        {!generated && !loading && (
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"0 32px"}}>
+            <div style={{width:"80px",height:"80px",borderRadius:"20px",background:"#ffffff",border:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:"20px",boxShadow:"0 4px 16px rgba(77,100,216,0.1)"}}>
+              <svg width="44" height="44" viewBox="0 0 28 28" fill="none">
+                <circle cx="14" cy="14" r="12" stroke="#4d64d8" strokeWidth="1.2" opacity="0.3"/>
+                <circle cx="14" cy="14" r="8" stroke="#4d64d8" strokeWidth="0.8" opacity="0.15"/>
+                <polygon points="14,3 12,14 14,12.5 16,14" fill="#4d64d8"/>
+                <polygon points="14,25 12,14 14,15.5 16,14" fill="#d1d5db"/>
+                <circle cx="14" cy="14" r="2" fill="white" stroke="#4d64d8" strokeWidth="1.5"/>
+                <line x1="14" y1="1" x2="14" y2="3" stroke="#4d64d8" strokeWidth="1" strokeLinecap="round"/>
+                <line x1="14" y1="25" x2="14" y2="27" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/>
+                <line x1="1" y1="14" x2="3" y2="14" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/>
+                <line x1="25" y1="14" x2="27" y2="14" stroke="#d1d5db" strokeWidth="1" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div style={{fontSize:"16px",fontWeight:600,color:"#111827",marginBottom:"8px",fontFamily:"Inter,sans-serif"}}>Configure your search</div>
+            <div style={{fontSize:"13px",color:"#9ca3af",maxWidth:"260px",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>Fill in the role, skills, and location — then generate a talent map</div>
+          </div>
+        )}
+
+        {loading && <LoadingScreen/>}
+
+        {mapData && !loading && (
+          <div className="relative z-10 p-8">
+            <div style={{marginBottom:"20px",paddingBottom:"18px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px"}}>
+              <div>
+                <h1 style={{fontSize:"22px",fontWeight:700,color:"#111827",lineHeight:1.2,letterSpacing:"-0.02em",fontFamily:"Inter,sans-serif"}}>
+                  {(form.role||"Talent Map").split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ")}
+                  {form.seniority && <span style={{color:"#9ca3af",fontWeight:400,margin:"0 8px",fontSize:"20px"}}>·</span>}
+                  {form.seniority && <span style={{color:"#9ca3af",fontWeight:400,fontSize:"20px"}}>{form.seniority}</span>}
+                </h1>
+                <p style={{fontSize:"13px",color:"#9ca3af",marginTop:"4px",fontFamily:"Inter,sans-serif"}}>
+                  {[form.company,form.location].filter(Boolean).join(" · ")} · {allNodes.length} nodes mapped
+                </p>
+              </div>
+              <button type="button" onClick={exportCSV}
+                style={{flexShrink:0,display:"flex",alignItems:"center",gap:"7px",padding:"9px 18px",borderRadius:"8px",fontSize:"13px",fontWeight:600,border:"1.5px solid #4d64d8",color:"#4d64d8",background:"#f5f7ff",cursor:"pointer",fontFamily:"Inter,sans-serif",transition:"all .15s",whiteSpace:"nowrap"}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export CSV
+              </button>
+            </div>
+            <ResultTabs mapData={mapData} form={form}/>
           </div>
         )}
       </div>
-      <Chatbot/>
+
+      <Chatbot mapData={mapData} form={form}/>
     </div>
+    </>
   );
 }
