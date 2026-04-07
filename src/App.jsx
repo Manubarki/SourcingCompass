@@ -463,253 +463,143 @@ function CandidatesTab({ mapData, form }) {
 
 // ─── X-Ray Builder ────────────────────────────────────────────────────────────
 function XRayTab({ mapData, form }) {
-  const [copied, setCopied] = useState(null);
+  const [copied, setCopied]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result,  setResult]  = useState(null);
+  const [error,   setError]   = useState(null);
 
-  const LINKEDIN_SITE = {
-    "United States": "linkedin.com/in",
-    "Canada":        "ca.linkedin.com/in",
-    "India":         "in.linkedin.com/in",
-    "United Kingdom":"uk.linkedin.com/in",
-    "Europe":        "linkedin.com/in",
-    "Australia":     "au.linkedin.com/in",
-    "Singapore":     "sg.linkedin.com/in",
-  };
-  const site = LINKEDIN_SITE[form.location] || "linkedin.com/in";
-
-  // Generate strings
-  const companies = (mapData.companies||[]).map(c=>c.label);
-  const adjacent  = (mapData.adjacent ||[]).map(c=>c.label);
-  const wildcards = (mapData.wildcards||[]).map(c=>c.label);
-  const titles    = (mapData.titles   ||[]).map(t=>t.label);
-  const skill1    = form.skills?.[0] || "";
-  const skill2    = form.skills?.[1] || "";
-  const locHint   = (form.location==="United States"||form.location==="Europe") ? ` "${form.location}"` : "";
-
-  function buildStrings() {
-    const strings = [];
-
-    const allSkills = (form.skills||[]).filter(Boolean);
-
-    // Skills as OR alternatives — any one of them is sufficient
-    // e.g. ("Apache Iceberg" OR "Delta Lake" OR "Hudi")
-    const skillsOR = allSkills.length > 1
-      ? `(${allSkills.map(s=>`"${s}"`).join(" OR ")})`
-      : allSkills.length === 1 ? `"${allSkills[0]}"` : "";
-
-    // All skills as AND — must have all of them (stricter)
-    const skillsAND = allSkills.map(s=>`"${s}"`).join(" AND ");
-
-    // Strip seniority prefix → core role
-    const roleStem = form.role
-      .replace(/^(Intern|Junior|Mid-Level|Senior|Lead|Staff|Principal|Manager|Director|VP|SVP)\s+/i, "")
-      .trim();
-
-    // Title variants as OR group
-    const TITLE_VARIANTS = {
-      "Intern":          ["Intern","Junior"],
-      "Junior":          ["Junior","Associate"],
-      "Mid-Level":       ["Senior","Lead"],
-      "Senior":          ["Senior","Lead"],
-      "Lead":            ["Lead","Senior","Staff"],
-      "Staff":           ["Staff","Senior","Lead","Principal"],
-      "Principal":       ["Principal","Staff","Director"],
-      "Manager":         ["Manager","Senior Manager"],
-      "Senior Manager":  ["Senior Manager","Manager","Director"],
-      "Director":        ["Director","Senior Director"],
-      "Senior Director": ["Senior Director","Director","VP"],
-      "VP":              ["VP","Vice President"],
-      "SVP":             ["SVP","VP"],
-      "C-Level":         ["Chief","President"],
-    };
-    const senVariants = TITLE_VARIANTS[form.seniority] || [form.seniority];
-    // Build title OR group: ("Staff Engineer" OR "Principal Engineer")
-    const titlesOR = senVariants.length > 1
-      ? `(${senVariants.map(s => `"${s} ${roleStem}"`).join(" OR ")})`
-      : `"${senVariants[0]} ${roleStem}"`;
-
-    // Location as OR group — city-level is much more specific than just "India"
-    const LOCATION_CITIES = {
-      "India":          "(India OR Bangalore OR Bengaluru OR Mumbai OR Pune OR Hyderabad OR Delhi OR Chennai)",
-      "United States":  '("United States" OR "San Francisco" OR "New York" OR Seattle OR Austin)',
-      "United Kingdom": '("United Kingdom" OR London OR Manchester)',
-      "Europe":         "(Europe OR London OR Berlin OR Amsterdam OR Paris OR Dublin)",
-      "Canada":         "(Canada OR Toronto OR Vancouver OR Montreal)",
-      "Australia":      "(Australia OR Sydney OR Melbourne)",
-      "Singapore":      "Singapore",
-    };
-    const locationOR = LOCATION_CITIES[form.location] || (form.location ? `"${form.location}"` : "");
-    const locQ = locationOR ? ` AND ${locationOR}` : "";
-
-    // Company OR pool for broad title searches
-    const coPoolOR = companies.slice(0,6).map(c=>`"${c}"`).join(" OR ");
-
-    // ── TIER 1: intitle + title OR + skills OR + location — most precise ────────
-    // intitle: locks to current LinkedIn title. Skills as OR (any one match is fine)
-    // -recruiter -hiring filters noise
-    if (skillsOR) {
-      strings.push({
-        label: `${form.role} — intitle + skills`,
-        category: "Target Title",
-        dot: "#1da882",
-        tag: "Most precise",
-        queries: [
-          `site:${site} intitle:"${roleStem}" AND ${skillsOR}${locQ} -recruiter -hiring`,
-        ],
+  async function generate() {
+    setLoading(true); setError(null); setResult(null);
+    try {
+      const r = await fetch("/api/xray", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role:      form.role,
+          skills:    form.skills || [],
+          seniority: form.seniority,
+          location:  form.location,
+          companies: (mapData.companies||[]).map(c=>c.label),
+          adjacent:  (mapData.adjacent ||[]).map(c=>c.label),
+          wildcards: (mapData.wildcards||[]).map(c=>c.label),
+        }),
       });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setResult(data);
+    } catch(e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
     }
-
-    // ── TIER 2: Title OR group + skills OR + company pool ───────────────────────
-    // Catches title variants: "Staff Engineer" OR "Principal Engineer"
-    if (coPoolOR) {
-      strings.push({
-        label: `${titlesOR} + company pool`,
-        category: "Target Title",
-        dot: "#1da882",
-        tag: "Title OR + companies",
-        queries: [
-          skillsOR
-            ? `site:${site} ${titlesOR} AND ${skillsOR} AND (${coPoolOR})${locQ} -recruiter`
-            : `site:${site} ${titlesOR} AND (${coPoolOR})${locQ} -recruiter`,
-        ],
-      });
-    }
-
-    // ── TIER 3: Per company — intitle + company + skills ────────────────────────
-    companies.slice(0,6).forEach(co => {
-      strings.push({
-        label: co,
-        category: "Target Company",
-        dot: "#4d64d8",
-        tag: "intitle + company",
-        queries: [
-          skillsOR
-            ? `site:${site} intitle:"${roleStem}" AND "${co}" AND ${skillsOR}${locQ} -recruiter`
-            : `site:${site} intitle:"${roleStem}" AND "${co}"${locQ} -recruiter`,
-        ],
-      });
-    });
-
-    // ── TIER 4: Per company — keyword (broader, catches variant titles) ──────────
-    companies.slice(0,6).forEach(co => {
-      strings.push({
-        label: `${co} (broad)`,
-        category: "Target Company",
-        dot: "#4d64d8",
-        tag: "keyword search",
-        queries: [
-          skillsOR
-            ? `site:${site} "${co}" AND "${roleStem}" AND ${skillsOR}${locQ}`
-            : `site:${site} "${co}" AND "${roleStem}"${locQ}`,
-        ],
-      });
-    });
-
-    // ── TIER 5: Adjacent ─────────────────────────────────────────────────────────
-    adjacent.slice(0,4).forEach(co => {
-      strings.push({
-        label: co,
-        category: "Adjacent Pool",
-        dot: "#9b6ef5",
-        tag: "Adjacent",
-        queries: [
-          skillsOR
-            ? `site:${site} intitle:"${roleStem}" AND "${co}" AND ${skillsOR}${locQ} -recruiter`
-            : `site:${site} intitle:"${roleStem}" AND "${co}"${locQ} -recruiter`,
-        ],
-      });
-    });
-
-    // ── TIER 6: Wildcards ────────────────────────────────────────────────────────
-    wildcards.slice(0,3).forEach(co => {
-      strings.push({
-        label: co,
-        category: "Wildcard",
-        dot: "#f6720d",
-        tag: "Wildcard",
-        queries: [
-          skillsOR
-            ? `site:${site} "${co}" AND "${roleStem}" AND ${skillsOR}${locQ} -recruiter`
-            : `site:${site} "${co}" AND "${roleStem}"${locQ} -recruiter`,
-        ],
-      });
-    });
-
-
-
-    return strings;
   }
-
-  const strings = buildStrings();
 
   function copy(text, id) {
     navigator.clipboard.writeText(text);
     setCopied(id);
-    setTimeout(()=>setCopied(null), 2000);
+    setTimeout(() => setCopied(null), 2000);
   }
 
   function openGoogle(q) {
-    window.open("https://www.google.com/search?q="+encodeURIComponent(q), "_blank");
+    window.open("https://www.google.com/search?q=" + encodeURIComponent(q), "_blank");
   }
-
-  const CAT_COLORS = {
-    "Target Company": {bg:"#eff2fe", text:"#4d64d8", border:"#d2d8f8"},
-    "Target Title":   {bg:"#f0fdf9", text:"#1da882", border:"#a7f3d0"},
-    "Adjacent Pool":  {bg:"#f5f3ff", text:"#7c3aed", border:"#ddd6fe"},
-    "Wildcard":       {bg:"#fff7ed", text:"#c2410c", border:"#fed7aa"},
-
-  };
 
   return (
     <div>
+      {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
         <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"#0891b2",boxShadow:"0 0 0 3px rgba(8,145,178,0.15)"}}/>
-        <span style={{fontSize:"11px",fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif"}}>X-Ray Search Strings</span>
+        <span style={{fontSize:"11px",fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif"}}>AI X-Ray Search Strings</span>
         <div style={{flex:1,height:"1px",background:"#f3f4f6"}}/>
-        <span style={{fontSize:"11px",color:"#9ca3af",fontFamily:"Inter,sans-serif"}}>{strings.length} strings</span>
       </div>
       <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"20px",fontFamily:"Inter,sans-serif"}}>
-        Ready-to-use Google X-ray strings. Click to open in Google or copy to clipboard.
+        AI researches your skills ecosystem — finds alternative keywords, related tech, and community terms — then generates intelligent boolean strings.
       </p>
 
-      <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-        {strings.map((group, gi) => {
-          const col = CAT_COLORS[group.category] || CAT_COLORS["Target Company"];
-          return (
-            <div key={gi} style={{background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",borderLeft:`3px solid ${group.dot}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",flexWrap:"wrap"}}>
-                <span style={{fontSize:"13px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif"}}>{group.label}</span>
-                <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",fontWeight:600,background:col.bg,color:col.text,border:`1px solid ${col.border}`,fontFamily:"Inter,sans-serif"}}>{group.category}</span>
-                {group.tag && <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",fontWeight:500,background:"#f3f4f6",color:"#6b7280",border:"1px solid #e5e7eb",fontFamily:"Inter,sans-serif"}}>{group.tag}</span>}
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
-                {group.queries.map((q, qi) => (
-                  <div key={qi} style={{display:"flex",alignItems:"center",gap:"8px",background:"#f8fafc",borderRadius:"7px",padding:"8px 10px",border:"1px solid #e5e7eb"}}>
-                    <span style={{flex:1,fontSize:"12px",color:"#374151",fontFamily:"'JetBrains Mono',monospace",wordBreak:"break-all",lineHeight:1.5}}>{q}</span>
-                    <div style={{display:"flex",gap:"5px",flexShrink:0}}>
-                      <button type="button" onClick={()=>copy(q, `${gi}-${qi}`)}
-                        style={{padding:"5px 10px",borderRadius:"6px",fontSize:"11px",fontWeight:600,border:"1px solid #e5e7eb",background: copied===`${gi}-${qi}` ? "#f0fdf9" : "#ffffff",color: copied===`${gi}-${qi}` ? "#1da882" : "#6b7280",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap"}}>
-                        {copied===`${gi}-${qi}` ? "✓ Copied" : "Copy"}
-                      </button>
-                      <button type="button" onClick={()=>openGoogle(q)}
-                        style={{padding:"5px 10px",borderRadius:"6px",fontSize:"11px",fontWeight:600,border:"1px solid #4d64d8",background:"#4d64d8",color:"#ffffff",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap"}}>
-                        Search ↗
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Generate button */}
+      {!result && !loading && (
+        <button type="button" onClick={generate}
+          style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 20px",borderRadius:"8px",
+            background:"#0891b2",color:"#fff",border:"none",cursor:"pointer",fontSize:"13px",
+            fontWeight:600,fontFamily:"Inter,sans-serif",marginBottom:"20px",
+            boxShadow:"0 2px 8px rgba(8,145,178,0.3)"}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          Generate X-Ray Strings
+        </button>
+      )}
 
-      <div style={{marginTop:"16px",padding:"12px 14px",background:"#f8fafc",borderRadius:"8px",border:"1px solid #e5e7eb"}}>
-        <div style={{fontSize:"11px",fontWeight:600,color:"#374151",marginBottom:"6px",fontFamily:"Inter,sans-serif"}}>💡 How to use</div>
-        <div style={{fontSize:"12px",color:"#6b7280",lineHeight:1.6,fontFamily:"Inter,sans-serif"}}>
-          Click <strong>Search ↗</strong> to open directly in Google, or <strong>Copy</strong> and paste into any browser. 
-          Results are LinkedIn profiles matching your criteria. Refine by adding skills or location to any string.
+      {/* Loading */}
+      {loading && (
+        <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"16px",background:"#f0fdff",borderRadius:"10px",border:"1px solid #a5f3fc",marginBottom:"20px"}}>
+          <div style={{width:"16px",height:"16px",border:"2px solid #0891b2",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite",flexShrink:0}}/>
+          <span style={{fontSize:"13px",color:"#0891b2",fontFamily:"Inter,sans-serif",fontWeight:500}}>AI is researching your skills ecosystem and generating boolean strings...</span>
         </div>
-      </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div style={{padding:"12px 14px",background:"#fef2f2",borderRadius:"8px",border:"1px solid #fecaca",marginBottom:"16px"}}>
+          <span style={{fontSize:"12px",color:"#dc2626",fontFamily:"Inter,sans-serif"}}>{error}</span>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div>
+          {/* Strategy */}
+          {result.strategy && (
+            <div style={{marginBottom:"20px",padding:"14px 16px",background:"#f0fdff",borderRadius:"10px",border:"1px solid #a5f3fc",borderLeft:"3px solid #0891b2"}}>
+              <div style={{fontSize:"10px",fontWeight:600,color:"#0891b2",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:"6px",fontFamily:"Inter,sans-serif"}}>
+                💡 Search Strategy
+              </div>
+              <p style={{fontSize:"13px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>{result.strategy}</p>
+            </div>
+          )}
+
+          {/* Strings */}
+          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+            {(result.strings||[]).map((s, i) => (
+              <div key={i} style={{background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",borderLeft:"3px solid #0891b2"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}>
+                  <span style={{fontSize:"11px",fontWeight:700,padding:"2px 8px",borderRadius:"4px",
+                    background:"#f0fdff",color:"#0891b2",border:"1px solid #a5f3fc",fontFamily:"Inter,sans-serif"}}>
+                    {i+1}
+                  </span>
+                  <span style={{fontSize:"13px",fontWeight:600,color:"#111827",fontFamily:"Inter,sans-serif"}}>{s.label}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"flex-start",gap:"8px",background:"#f8fafc",borderRadius:"7px",padding:"10px 12px",border:"1px solid #e5e7eb"}}>
+                  <span style={{flex:1,fontSize:"12px",color:"#374151",fontFamily:"'JetBrains Mono',monospace",wordBreak:"break-all",lineHeight:1.6}}>{s.query}</span>
+                  <div style={{display:"flex",gap:"5px",flexShrink:0,marginTop:"2px"}}>
+                    <button type="button" onClick={()=>copy(s.query, i)}
+                      style={{padding:"5px 10px",borderRadius:"6px",fontSize:"11px",fontWeight:600,
+                        border:"1px solid #e5e7eb",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap",
+                        background: copied===i ? "#f0fdf9" : "#ffffff",
+                        color:      copied===i ? "#1da882" : "#6b7280"}}>
+                      {copied===i ? "✓ Copied" : "Copy"}
+                    </button>
+                    <button type="button" onClick={()=>openGoogle(s.query)}
+                      style={{padding:"5px 10px",borderRadius:"6px",fontSize:"11px",fontWeight:600,
+                        border:"1px solid #0891b2",background:"#0891b2",color:"#fff",
+                        cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap"}}>
+                      Search ↗
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Regenerate */}
+          <button type="button" onClick={generate}
+            style={{marginTop:"16px",display:"flex",alignItems:"center",gap:"6px",padding:"8px 16px",
+              borderRadius:"7px",background:"#f0fdff",color:"#0891b2",border:"1px solid #a5f3fc",
+              cursor:"pointer",fontSize:"12px",fontWeight:600,fontFamily:"Inter,sans-serif"}}>
+            ↻ Regenerate
+          </button>
+        </div>
+      )}
     </div>
   );
 }
