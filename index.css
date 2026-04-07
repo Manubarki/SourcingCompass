@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 230 65% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 93%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 168 72% 43%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 230 65% 55%;
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-bg: 228 40% 14%;
+    --sidebar-fg: 220 20% 82%;
+    --sidebar-accent-color: 168 72% 50%;
+    --sidebar-muted: 228 30% 22%;
+    --sidebar-input: 228 30% 20%;
+
+    /* Score colors */
+    --score-high: 168 72% 43%;
+    --score-medium: 230 65% 55%;
+    --score-low: 25 95% 55%;
+
+    /* Tags */
+    --tag-bg: 168 60% 92%;
+    --tag-fg: 168 72% 28%;
+    --tag-remove: 0 70% 55%;
+
+    /* Effects */
+    --shadow-card: 0 1px 3px 0 hsl(220 15% 80% / 0.3), 0 1px 2px -1px hsl(220 15% 80% / 0.2);
+    --shadow-card-hover: 0 10px 25px -5px hsl(230 65% 55% / 0.1), 0 4px 10px -3px hsl(220 15% 80% / 0.15);
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
