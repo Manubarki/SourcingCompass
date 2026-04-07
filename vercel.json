@@ -3,6 +3,7 @@
   "installCommand": "npm install",
   "outputDirectory": "dist",
   "framework": "vite",
+  "nodeVersion": "20.x",
   "functions": {
     "api/generate.js": { "maxDuration": 30 },
     "api/source.js":   { "maxDuration": 30 }
