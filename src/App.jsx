@@ -487,74 +487,124 @@ function XRayTab({ mapData, form }) {
 
   function buildStrings() {
     const strings = [];
-    const coList = companies.slice(0,5).map(c=>`"${c}"`).join(" OR ");
-    // Last meaningful word of role for intitle: e.g. "Staff Software Engineer" -> "Engineer"
-    const roleWords = form.role.split(" ").filter(w => w.length > 3);
-    const lastWord  = roleWords[roleWords.length - 1] || form.role;
 
-    // All skills as AND quoted keywords
-    const allSkillsHint = (form.skills||[]).filter(Boolean).map(s=>`"${s}"`).join(" ");
-    const skillHint = allSkillsHint ? ` ${allSkillsHint}` : "";
+    const allSkills = (form.skills||[]).filter(Boolean);
 
-    // ── TIER 1: intitle:user's role + seniority keyword + skills ──────────────
-    // Use the EXACT role title user entered — seniority goes as a plain keyword
-    // Format: site:linkedin.com/in intitle:"Customer Success Manager" Senior "data governance"
-    const SENIORITY_ADJACENT_UI = {
-      "Intern":["Intern","Associate"],"Junior":["Junior","Associate"],
-      "Mid-Level":["Mid","Senior"],"Senior":["Senior","Lead"],
-      "Lead":["Lead","Senior","Staff"],"Staff":["Staff","Lead","Senior","Principal"],
-      "Principal":["Principal","Staff","Director"],"Manager":["Manager","Senior Manager"],
-      "Senior Manager":["Senior Manager","Director"],"Director":["Director","Senior Director"],
-      "Senior Director":["Senior Director","VP"],"VP":["VP","Vice President"],
-      "SVP":["SVP","VP"],"C-Level":["Chief","President"],
+    // Skills as OR alternatives — any one of them is sufficient
+    // e.g. ("Apache Iceberg" OR "Delta Lake" OR "Hudi")
+    const skillsOR = allSkills.length > 1
+      ? `(${allSkills.map(s=>`"${s}"`).join(" OR ")})`
+      : allSkills.length === 1 ? `"${allSkills[0]}"` : "";
+
+    // All skills as AND — must have all of them (stricter)
+    const skillsAND = allSkills.map(s=>`"${s}"`).join(" AND ");
+
+    // Strip seniority prefix → core role
+    const roleStem = form.role
+      .replace(/^(Intern|Junior|Mid-Level|Senior|Lead|Staff|Principal|Manager|Director|VP|SVP)\s+/i, "")
+      .trim();
+
+    // Title variants as OR group
+    const TITLE_VARIANTS = {
+      "Intern":          ["Intern","Junior"],
+      "Junior":          ["Junior","Associate"],
+      "Mid-Level":       ["Senior","Lead"],
+      "Senior":          ["Senior","Lead"],
+      "Lead":            ["Lead","Senior","Staff"],
+      "Staff":           ["Staff","Senior","Lead","Principal"],
+      "Principal":       ["Principal","Staff","Director"],
+      "Manager":         ["Manager","Senior Manager"],
+      "Senior Manager":  ["Senior Manager","Manager","Director"],
+      "Director":        ["Director","Senior Director"],
+      "Senior Director": ["Senior Director","Director","VP"],
+      "VP":              ["VP","Vice President"],
+      "SVP":             ["SVP","VP"],
+      "C-Level":         ["Chief","President"],
     };
-    const senLevels = SENIORITY_ADJACENT_UI[form.seniority] || [form.seniority];
-    senLevels.slice(0,3).forEach(sen => {
+    const senVariants = TITLE_VARIANTS[form.seniority] || [form.seniority];
+    // Build title OR group: ("Staff Engineer" OR "Principal Engineer")
+    const titlesOR = senVariants.length > 1
+      ? `(${senVariants.map(s => `"${s} ${roleStem}"`).join(" OR ")})`
+      : `"${senVariants[0]} ${roleStem}"`;
+
+    // Location as OR group — city-level is much more specific than just "India"
+    const LOCATION_CITIES = {
+      "India":          "(India OR Bangalore OR Bengaluru OR Mumbai OR Pune OR Hyderabad OR Delhi OR Chennai)",
+      "United States":  '("United States" OR "San Francisco" OR "New York" OR Seattle OR Austin)',
+      "United Kingdom": '("United Kingdom" OR London OR Manchester)',
+      "Europe":         "(Europe OR London OR Berlin OR Amsterdam OR Paris OR Dublin)",
+      "Canada":         "(Canada OR Toronto OR Vancouver OR Montreal)",
+      "Australia":      "(Australia OR Sydney OR Melbourne)",
+      "Singapore":      "Singapore",
+    };
+    const locationOR = LOCATION_CITIES[form.location] || (form.location ? `"${form.location}"` : "");
+    const locQ = locationOR ? ` AND ${locationOR}` : "";
+
+    // Company OR pool for broad title searches
+    const coPoolOR = companies.slice(0,6).map(c=>`"${c}"`).join(" OR ");
+
+    // ── TIER 1: intitle + title OR + skills OR + location — most precise ────────
+    // intitle: locks to current LinkedIn title. Skills as OR (any one match is fine)
+    // -recruiter -hiring filters noise
+    if (skillsOR) {
       strings.push({
-        label: `${form.role} · ${sen}`,
+        label: `${form.role} — intitle + skills`,
         category: "Target Title",
         dot: "#1da882",
-        tag: "intitle + seniority + skills",
+        tag: "Most precise",
         queries: [
-          `site:${site} intitle:"${form.role}" ${sen}${skillHint}${locHint}`,
+          `site:${site} intitle:"${roleStem}" AND ${skillsOR}${locQ} -recruiter -hiring`,
         ],
       });
-    });
+    }
 
-    // ── TIER 2: intitle:user's role + intitle:company + seniority + skills ─────
-    // Format: site:linkedin.com/in intitle:"Customer Success Manager" intitle:"Informatica" Senior "data governance"
+    // ── TIER 2: Title OR group + skills OR + company pool ───────────────────────
+    // Catches title variants: "Staff Engineer" OR "Principal Engineer"
+    if (coPoolOR) {
+      strings.push({
+        label: `${titlesOR} + company pool`,
+        category: "Target Title",
+        dot: "#1da882",
+        tag: "Title OR + companies",
+        queries: [
+          skillsOR
+            ? `site:${site} ${titlesOR} AND ${skillsOR} AND (${coPoolOR})${locQ} -recruiter`
+            : `site:${site} ${titlesOR} AND (${coPoolOR})${locQ} -recruiter`,
+        ],
+      });
+    }
+
+    // ── TIER 3: Per company — intitle + company + skills ────────────────────────
     companies.slice(0,6).forEach(co => {
-      const sen = senLevels[0];
       strings.push({
         label: co,
         category: "Target Company",
         dot: "#4d64d8",
-        tag: "intitle role + intitle company",
+        tag: "intitle + company",
         queries: [
-          `site:${site} intitle:"${form.role}" intitle:"${co}" ${sen}${skillHint}${locHint}`,
-          // Broader fallback — no intitle on company
-          `site:${site} intitle:"${form.role}" "${co}" ${sen}${skillHint}${locHint}`,
+          skillsOR
+            ? `site:${site} intitle:"${roleStem}" AND "${co}" AND ${skillsOR}${locQ} -recruiter`
+            : `site:${site} intitle:"${roleStem}" AND "${co}"${locQ} -recruiter`,
         ],
       });
     });
 
-    // ── TIER 3: Per company — role only, then role + skill ─────────────────────
+    // ── TIER 4: Per company — keyword (broader, catches variant titles) ──────────
     companies.slice(0,6).forEach(co => {
       strings.push({
-        label: co,
+        label: `${co} (broad)`,
         category: "Target Company",
         dot: "#4d64d8",
-        tag: "Company search",
+        tag: "keyword search",
         queries: [
-          `site:${site} "${co}" "${form.role}"${locHint}`,
-          skill1
-            ? `site:${site} "${co}" "${form.role}" ${skill1}${locHint}`
-            : null,
-        ].filter(Boolean),
+          skillsOR
+            ? `site:${site} "${co}" AND "${roleStem}" AND ${skillsOR}${locQ}`
+            : `site:${site} "${co}" AND "${roleStem}"${locQ}`,
+        ],
       });
     });
 
-    // ── TIER 4: Adjacent ───────────────────────────────────────────────────────
+    // ── TIER 5: Adjacent ─────────────────────────────────────────────────────────
     adjacent.slice(0,4).forEach(co => {
       strings.push({
         label: co,
@@ -562,13 +612,14 @@ function XRayTab({ mapData, form }) {
         dot: "#9b6ef5",
         tag: "Adjacent",
         queries: [
-          `site:${site} "${co}" "${form.role}"${locHint}`,
-          skill1 ? `site:${site} "${co}" "${skill1}" ${form.seniority}${locHint}` : null,
-        ].filter(Boolean),
+          skillsOR
+            ? `site:${site} intitle:"${roleStem}" AND "${co}" AND ${skillsOR}${locQ} -recruiter`
+            : `site:${site} intitle:"${roleStem}" AND "${co}"${locQ} -recruiter`,
+        ],
       });
     });
 
-    // ── TIER 5: Wildcards ──────────────────────────────────────────────────────
+    // ── TIER 6: Wildcards ────────────────────────────────────────────────────────
     wildcards.slice(0,3).forEach(co => {
       strings.push({
         label: co,
@@ -576,11 +627,14 @@ function XRayTab({ mapData, form }) {
         dot: "#f6720d",
         tag: "Wildcard",
         queries: [
-          `site:${site} "${co}" "${form.role}"${locHint}`,
-          skill1 ? `site:${site} "${co}" "${skill1}"${locHint}` : null,
-        ].filter(Boolean),
+          skillsOR
+            ? `site:${site} "${co}" AND "${roleStem}" AND ${skillsOR}${locQ} -recruiter`
+            : `site:${site} "${co}" AND "${roleStem}"${locQ} -recruiter`,
+        ],
       });
     });
+
+
 
     return strings;
   }
@@ -602,6 +656,7 @@ function XRayTab({ mapData, form }) {
     "Target Title":   {bg:"#f0fdf9", text:"#1da882", border:"#a7f3d0"},
     "Adjacent Pool":  {bg:"#f5f3ff", text:"#7c3aed", border:"#ddd6fe"},
     "Wildcard":       {bg:"#fff7ed", text:"#c2410c", border:"#fed7aa"},
+
   };
 
   return (
