@@ -48,7 +48,14 @@ export function getRelevant(companies, role, skills, industries) {
 const LITELLM_MODEL   = "claude-haiku-4.5";
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
-async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
+async function callEndpoint(url, apiKey, model, prompt, maxTokens, systemPrompt) {
+  const body = {
+    model,
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: maxTokens,
+  };
+  if (systemPrompt) body.system = systemPrompt;
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -56,11 +63,7 @@ async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
       "anthropic-version": "2023-06-01",
       "x-api-key": apiKey,
     },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: maxTokens,
-    }),
+    body: JSON.stringify(body),
   });
   const rawText = await response.text();
   let data;
@@ -70,16 +73,16 @@ async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
   return data.content?.map(b => b.text || "").join("").trim() || "";
 }
 
-export async function callLLM(prompt, maxTokens = 6000) {
+export async function callLLM(prompt, maxTokens = 8192, systemPrompt = null) {
   if (process.env.LITELLM_API_KEY) {
     try {
-      return await callEndpoint("https://llmproxy.atlan.dev/v1/messages", process.env.LITELLM_API_KEY, LITELLM_MODEL, prompt, maxTokens);
+      return await callEndpoint("https://llmproxy.atlan.dev/v1/messages", process.env.LITELLM_API_KEY, LITELLM_MODEL, prompt, maxTokens, systemPrompt);
     } catch (err) {
       console.warn("[LLM] Primary failed:", err.message);
     }
   }
   if (process.env.ANTHROPIC_API_KEY) {
-    return await callEndpoint("https://api.anthropic.com/v1/messages", process.env.ANTHROPIC_API_KEY, ANTHROPIC_MODEL, prompt, maxTokens);
+    return await callEndpoint("https://api.anthropic.com/v1/messages", process.env.ANTHROPIC_API_KEY, ANTHROPIC_MODEL, prompt, maxTokens, systemPrompt);
   }
   throw new Error("No LLM API key configured.");
 }
