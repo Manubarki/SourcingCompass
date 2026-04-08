@@ -43,12 +43,22 @@ TASK:
    - AND — must have (implicit between terms)
    - -term — exclude (use -recruiter -hiring -consultant to filter noise)
 
+CRITICAL RULE FOR TITLES: Never use the seniority as a plain keyword.
+Always generate real title alternatives as an OR group in intitle:.
+Examples:
+  VP Sales → intitle:("VP Sales" OR "Vice President Sales" OR "Head of Sales" OR "Sales Director")
+  Staff Engineer → intitle:("Staff Engineer" OR "Staff Software Engineer" OR "Principal Engineer")
+  Customer Success Manager → intitle:("Customer Success Manager" OR "Client Success Manager" OR "Customer Success Lead")
+
 Rules for strings:
-- String 1: intitle:role + skill alternatives as OR group + location
-- String 2: title variants as OR + related tech as OR + exclude noise
-- String 3: intitle:architect/lead variant + specific tech combo + location
-- String 4: company pool as OR + role + skill
-- String 5: niche/community angle — think creatively about where this talent hides
+- String 1: intitle:(title OR alt1 OR alt2 OR alt3) site:linkedin + location keyword
+- String 2: intitle:(title OR alt) AND (skill1 OR skill_alt1 OR skill_alt2) AND location -noise
+- String 3: intitle:(seniority_variant title) AND (related_tech1 OR related_tech2) AND location
+- String 4: site:linkedin ("company1" OR "company2" OR "company3") AND intitle:(title OR alt) AND skill
+- String 5: niche community angle — use ecosystem terms, community names, conference names
+
+Every string MUST have title alternatives in an OR group. Never: intitle:"VP Sales" VP.
+Always: intitle:("VP Sales" OR "Vice President Sales" OR "Head of Sales")
 
 Return ONLY valid JSON, no markdown:
 {
