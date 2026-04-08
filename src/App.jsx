@@ -902,24 +902,25 @@ Use this data to give specific, contextual answers about the current map.`;
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 function buildPrompt(form) {
   return [
-    "You are a talent intelligence system. Return structured JSON only. No markdown, no backticks, no explanation.",
+    "You are a talent intelligence system. Return ONLY compact single-line JSON. No newlines inside JSON. No markdown. No backticks. No explanation.",
     "Role: "+form.role+" | Hiring Company: "+form.company+" | Location: "+form.location+" | Seniority: "+form.seniority+" | Skills: "+form.skills.join(", "),
     "Industries: "+(form.industries.join(", ")||"Any")+" | Exclusions: "+(form.exclusions.join(", ")||"None"),
     "",
     "CRITICAL RULES:",
-    "1. companies — ONLY use company names that appear in the VERIFIED COMPANY LIST below. Do NOT invent company names. Do NOT use open source projects, frameworks, or tools (Apache Kafka, Spark, dbt are tools NOT companies). Pick 6 companies.",
-    "2. adjacent — 4 real hireable companies with transferable skills. Must be real companies people work at, not foundations or communities.",
-    "3. wildcards — 3 real companies a recruiter would never think of. BANNED: Airbnb, Netflix, Uber, Meta, Google, Amazon, Apple, Microsoft, Stripe. Think gaming, fintech infra, developer tools.",
-    "4. titles — 5-7 real job title strings as they actually appear on LinkedIn profiles. Research all common alternative titles for this specific role — different companies use different naming conventions. Include seniority variants, functional variants, and industry-specific naming. Examples for Customer Success Manager: Senior Customer Success Manager, Enterprise Customer Success Manager, Strategic Customer Success Manager, Client Success Manager, Customer Success Lead, Account Manager. Examples for Staff Engineer: Staff Software Engineer, Principal Engineer, Senior Staff Engineer. To combine similar titles use: '\"Senior Customer Success Manager\" OR \"Enterprise Customer Success Manager\"'. Always think: what would this person's LinkedIn title actually say?",
+    "1. companies — ONLY use company names from the VERIFIED COMPANY LIST below. NOT open source projects/frameworks/tools. Pick 6.",
+    "2. adjacent — 4 real companies with transferable skills. Real employers, not foundations.",
+    "3. wildcards — 3 surprising companies. BANNED: Airbnb, Netflix, Uber, Meta, Google, Amazon, Apple, Microsoft, Stripe.",
+    "4. titles — 5 real LinkedIn job titles. Include seniority + functional variants. Combine similar: '\"Staff Data Engineer\" OR \"Principal Data Engineer\"'.",
     "",
-    "For poachabilitySignals: 2-3 signals prefixed [Confirmed] or [Signal]. One clear sentence each.",
-    "For likelyProfile: 1-2 sentences on who works there in this role.",
-    "For whyRelevant: 1 sentence on why good sourcing target.",
-    "For sub in adjacent/wildcards: 1-2 sentences on skill overlap.",
+    "KEEP ALL STRING VALUES UNDER 100 CHARACTERS. Be concise.",
+    "poachabilitySignals: exactly 2 signals, prefix [Confirmed] or [Signal]. Max 80 chars each.",
+    "likelyProfile: 1 short sentence, max 80 chars.",
+    "whyRelevant: 1 short sentence, max 80 chars.",
+    "sub in adjacent/wildcards: 1 short sentence on skill overlap, max 100 chars.",
     "",
-    'Return this JSON structure:',
-    '{"companies":[{"id":"c1","label":"Snowflake","sub":"Cloud Data Platform","tags":["data-lake","cloud"],"confidence":92,"stage":"Public","talentDensity":88,"poachability":72,"likelyProfile":"Staff engineers building distributed query engines and data pipeline infrastructure at scale.","poachabilitySignals":["[Confirmed] Announced 20% headcount reduction in Q4 2024.","[Signal] Slower career progression at senior IC levels post-IPO."],"whyRelevant":"Core product is a data platform — engineers work on identical problems to this role."}],"adjacent":[{"id":"a1","label":"Tableau","sub":"BI engineers understand data modelling and query optimisation — transfers directly to a data catalog role.","tags":["bi","visualisation"]}],"wildcards":[{"id":"w1","label":"Riot Games","sub":"Handles 1B+ game events per day with Kafka and Flink — same real-time data infrastructure problems, far less competed for.","tags":["gaming","real-time"]}],"titles":[{"id":"t1","label":"Staff Engineer","confidence":90},{"id":"t2","label":"Principal Engineer","confidence":88},{"id":"t3","label":"\"Staff Data Engineer\" OR \"Principal Data Engineer\"","confidence":85}]}',
-    "Return ONLY raw valid JSON. No text before or after.",
+    'RETURN EXACTLY THIS COMPACT JSON STRUCTURE (single line, no newlines, no pretty-printing):',
+    '{"companies":[{"id":"c1","label":"Snowflake","sub":"Cloud Data Platform","tags":["data-lake","cloud"],"confidence":92,"stage":"Public","talentDensity":88,"poachability":72,"likelyProfile":"Staff engineers building distributed query engines at scale.","poachabilitySignals":["[Confirmed] 20% headcount reduction Q4 2024.","[Signal] Slow senior IC progression post-IPO."],"whyRelevant":"Data platform — identical problem space."}],"adjacent":[{"id":"a1","label":"Tableau","sub":"BI engineers with data modelling skills transfer directly.","tags":["bi"]}],"wildcards":[{"id":"w1","label":"Riot Games","sub":"1B+ daily events via Kafka/Flink — same infra, less competition.","tags":["gaming"]}],"titles":[{"id":"t1","label":"Staff Engineer","confidence":90},{"id":"t2","label":"\\"Staff Data Engineer\\" OR \\"Principal Data Engineer\\"","confidence":85}]}',
+    "Output ONLY the JSON object. Single line. No whitespace between keys. Start with { end with }.",
   ].join("\n");
 }
 
