@@ -65,7 +65,14 @@ function getRelevant(companies, role, skills, industries) {
 }
 
 // ─── LLM helpers ─────────────────────────────────────────────────────────────
-async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
+async function callEndpoint(url, apiKey, model, prompt, maxTokens, systemPrompt) {
+  const body = {
+    model,
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: maxTokens,
+  };
+  if (systemPrompt) body.system = systemPrompt;
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -73,11 +80,7 @@ async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
       "anthropic-version": "2023-06-01",
       "x-api-key": apiKey,
     },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: maxTokens,
-    }),
+    body: JSON.stringify(body),
   });
   const rawText = await response.text();
   let data;
@@ -90,11 +93,11 @@ async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
 const LITELLM_MODEL   = "claude-haiku-4.5";
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
-async function callLLM(prompt, maxTokens = 6000) {
+async function callLLM(prompt, maxTokens = 8192, systemPrompt = null) {
   if (process.env.LITELLM_API_KEY) {
     try {
       console.log("[LLM] Trying primary (LiteLLM proxy) with", LITELLM_MODEL);
-      const result = await callEndpoint("https://llmproxy.atlan.dev/v1/messages", process.env.LITELLM_API_KEY, LITELLM_MODEL, prompt, maxTokens);
+      const result = await callEndpoint("https://llmproxy.atlan.dev/v1/messages", process.env.LITELLM_API_KEY, LITELLM_MODEL, prompt, maxTokens, systemPrompt);
       console.log("[LLM] Primary succeeded.");
       return result;
     } catch (err) {
@@ -104,7 +107,7 @@ async function callLLM(prompt, maxTokens = 6000) {
   if (process.env.ANTHROPIC_API_KEY) {
     try {
       console.log("[LLM] Trying fallback (Anthropic direct) with", ANTHROPIC_MODEL);
-      const result = await callEndpoint("https://api.anthropic.com/v1/messages", process.env.ANTHROPIC_API_KEY, ANTHROPIC_MODEL, prompt, maxTokens);
+      const result = await callEndpoint("https://api.anthropic.com/v1/messages", process.env.ANTHROPIC_API_KEY, ANTHROPIC_MODEL, prompt, maxTokens, systemPrompt);
       console.log("[LLM] Fallback succeeded.");
       return result;
     } catch (err) {
@@ -178,7 +181,8 @@ app.post("/api/generate", async (req, res) => {
     const companyList = companies.length > 0
       ? "\n\nVERIFIED COMPANY LIST — for Target Companies ONLY use companies from this list. Adjacent and Wildcards may go beyond this list but must still be real, active companies:\n" + getRelevant(companies, role, skills, industries)
       : "";
-    const raw = await callLLM(prompt + companyList);
+    const SYSTEM_JSON = "You output ONLY valid compact single-line JSON. No newlines inside the JSON. No markdown. No backticks. No explanation before or after. Every string value must be concise (under 120 chars).";
+    const raw = await callLLM(prompt + companyList, 8192, SYSTEM_JSON);
     const text = repairJSON(raw);
 
     res.json({ content: [{ type: "text", text }] });
