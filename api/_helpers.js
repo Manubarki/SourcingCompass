@@ -84,22 +84,60 @@ export async function callLLM(prompt, maxTokens = 6000) {
   throw new Error("No LLM API key configured.");
 }
 
+// Robust JSON repair — string-aware bracket counting, two-strategy approach.
+// Strategy 1: close unclosed brackets directly.
+// Strategy 2: cut to last safe comma + close.
 export function repairJSON(raw) {
   const s = raw.indexOf("{");
+  if (s === -1) return raw;
   const e = raw.lastIndexOf("}");
-  if (s === -1 || e === -1) return raw;
-  let clean = raw.slice(s, e + 1)
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .replace(/,\s*([}\]])/g, "$1");
+  let clean = e !== -1 ? raw.slice(s, e + 1) : raw.slice(s);
+
+  clean = clean
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")  // strip control chars (keep \t \n \r)
+    .replace(/,\s*([}\]])/g, "$1");                         // trailing commas
+
+  // Happy path
   try { JSON.parse(clean); return clean; } catch {}
-  // Try to repair truncated JSON
-  const trimmed = clean.slice(0, clean.lastIndexOf(","));
-  let opens = 0, openSq = 0;
-  for (const ch of trimmed) {
-    if (ch === '{') opens++; else if (ch === '}') opens--;
-    if (ch === '[') openSq++; else if (ch === ']') openSq--;
+
+  // Helper: try closing unclosed brackets on a fragment
+  function tryCloseFrom(str) {
+    let trimmed = str.replace(/,\s*$/, "");
+    let inStr = false, esc = false, opens = 0, openSq = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\' && inStr) { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') opens++; else if (ch === '}') opens--;
+      if (ch === '[') openSq++; else if (ch === ']') openSq--;
+    }
+    if (inStr) return null; // unterminated string — can't just close
+    const closed = trimmed + "]".repeat(Math.max(0, openSq)) + "}".repeat(Math.max(0, opens));
+    try { JSON.parse(closed); return closed; } catch { return null; }
   }
-  const repaired = trimmed + "]".repeat(Math.max(0,openSq)) + "}".repeat(Math.max(0,opens));
-  try { JSON.parse(repaired); return repaired; } catch {}
+
+  // Strategy 1: close brackets directly
+  let result = tryCloseFrom(clean);
+  if (result) return result;
+
+  // Strategy 2: cut to last safe structural comma, then close
+  let inStr = false, esc = false, lastSafeComma = -1, depth = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+    else if (ch === ',' && depth > 0) lastSafeComma = i;
+  }
+  if (lastSafeComma === -1) return raw;
+
+  result = tryCloseFrom(clean.slice(0, lastSafeComma));
+  if (result) return result;
+
   return raw;
 }
