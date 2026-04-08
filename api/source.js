@@ -77,41 +77,39 @@ export default async function handler(req, res) {
     ? `(${mustSkills.map(s => `"${s}"`).join(" OR ")})`
     : mustSkills.length === 1 ? `"${mustSkills[0]}"` : "";
 
-  // Build queries — 3 strategies per company
+  // Build queries — keep them SHORT for better Serper results
   const queryMeta = [];
 
   targets.forEach(company => {
-    // Q1: intitle: with seniority title variants + company + skills + location
-    if (skillsOR) {
-      queryMeta.push({
-        query: `site:${site} intitle:${titleOR} "${company}" ${skillsOR}${locQ} -recruiter -hiring -consultant`,
-        company, type: "title+company+skill"
-      });
-    } else {
-      queryMeta.push({
-        query: `site:${site} intitle:${titleOR} "${company}"${locQ} -recruiter -hiring -consultant`,
-        company, type: "title+company"
-      });
-    }
+    // Q1: intitle: seniority title variants + company (precise, no location clutter)
+    queryMeta.push({
+      query: `site:${site} intitle:${titleOR} "${company}" -recruiter -hiring`,
+      company, type: "title+company"
+    });
 
-    // Q2: company + roleStem keyword + skills (broader)
+    // Q2: company + full role (e.g. "VP Sales" not just "Sales")
+    queryMeta.push({
+      query: `site:${site} "${company}" "${role}"${locQ ? " " + locOR : ""}`,
+      company, type: "company+fullrole"
+    });
+
+    // Q3: if skills exist, company + skills + roleStem
     if (skillsOR) {
       queryMeta.push({
-        query: `site:${site} "${company}" "${roleStem}" ${skillsOR}${locQ}`,
+        query: `site:${site} "${company}" "${roleStem}" ${skillsOR}`,
         company, type: "company+role+skill"
-      });
-    } else {
-      queryMeta.push({
-        query: `site:${site} "${company}" "${roleStem}"${locQ}`,
-        company, type: "company+role"
       });
     }
   });
 
-  // Q3: title + skills only — catches people who recently moved
-  if (skillsOR && targets.length > 0) {
+  // Q4: title-only (no company) — catches people who recently moved
+  queryMeta.push({
+    query: `site:${site} intitle:${titleOR}${locQ ? " " + locOR : ""} -recruiter -hiring`,
+    company: "", type: "title+loc"
+  });
+  if (skillsOR) {
     queryMeta.push({
-      query: `site:${site} intitle:${titleOR} ${skillsOR}${locQ} -recruiter -hiring -consultant`,
+      query: `site:${site} intitle:${titleOR} ${skillsOR} -recruiter -hiring`,
       company: "", type: "title+skill"
     });
   }
@@ -209,6 +207,17 @@ export default async function handler(req, res) {
     return true;
   }
 
+  // ── Role relevance filter ──
+  function matchesRole(c) {
+    const stemLower = roleStem.toLowerCase();
+    if (stemLower.length < 3) return true;
+    const text = [c.currentTitle, c.snippet].join(" ").toLowerCase();
+    if (text.includes(stemLower)) return true;
+    const words = stemLower.split(/\s+/).filter(w => w.length > 2);
+    if (words.length > 1) return words.every(w => text.includes(w));
+    return false;
+  }
+
   // ── Skill validation ──
   function hasRequiredSkill(c) {
     if (!mustSkills.length) return true;
@@ -258,6 +267,7 @@ export default async function handler(req, res) {
     })
     .map(c => ({ ...c, score: scoreCandidate(c) }))
     .filter(c => {
+      if (!matchesRole(c)) return false;
       if (!matchesSeniority(c.currentTitle)) return false;
       if (!hasRequiredSkill(c)) return false;
       return true;
