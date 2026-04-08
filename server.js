@@ -87,7 +87,6 @@ async function callEndpoint(url, apiKey, model, prompt, maxTokens) {
   return data.content?.map(b => b.text || "").join("").trim() || "";
 }
 
-// Primary: Atlan LiteLLM proxy — Fallback: Anthropic direct
 const LITELLM_MODEL   = "claude-haiku-4.5";
 const ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
 
@@ -116,8 +115,6 @@ async function callLLM(prompt, maxTokens = 6000) {
 }
 
 // ─── Robust JSON repair ──────────────────────────────────────────────────────
-// String-aware: won't miscount { } [ ] inside quoted values.
-// Two strategies: (1) close unclosed brackets, (2) cut to last safe comma + close.
 function repairJSON(raw) {
   const s = raw.indexOf("{");
   if (s === -1) return raw;
@@ -125,13 +122,11 @@ function repairJSON(raw) {
   let clean = e !== -1 ? raw.slice(s, e + 1) : raw.slice(s);
 
   clean = clean
-    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")  // strip control chars (keep \t \n \r)
-    .replace(/,\s*([}\]])/g, "$1");                         // trailing commas
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+    .replace(/,\s*([}\]])/g, "$1");
 
-  // Happy path
   try { JSON.parse(clean); return clean; } catch {}
 
-  // Helper: try closing unclosed brackets on a fragment
   function tryCloseFrom(str) {
     let trimmed = str.replace(/,\s*$/, "");
     let inStr = false, esc = false, opens = 0, openSq = 0;
@@ -144,16 +139,14 @@ function repairJSON(raw) {
       if (ch === '{') opens++; else if (ch === '}') opens--;
       if (ch === '[') openSq++; else if (ch === ']') openSq--;
     }
-    if (inStr) return null; // unterminated string — can't just close
+    if (inStr) return null;
     const closed = trimmed + "]".repeat(Math.max(0, openSq)) + "}".repeat(Math.max(0, opens));
     try { JSON.parse(closed); return closed; } catch { return null; }
   }
 
-  // Strategy 1: close brackets directly
   let result = tryCloseFrom(clean);
   if (result) { console.log("[SERVER] Repaired JSON (close brackets)"); return result; }
 
-  // Strategy 2: cut to last safe structural comma, then close
   let inStr = false, esc = false, lastSafeComma = -1, depth = 0;
   for (let i = 0; i < clean.length; i++) {
     const ch = clean[i];
@@ -195,6 +188,11 @@ app.post("/api/generate", async (req, res) => {
 });
 
 // ─── /api/source — X-ray candidate sourcing via Serper ───────────────────────
+// Three-query strategy per company:
+//   Q1: intitle:(seniority title variants) + company + skills OR + location  (precise)
+//   Q2: company + roleStem keyword + skills OR + location                    (broader)
+//   Q3: intitle:(seniority title variants) + skills OR + location            (no company — catches movers)
+// Post-filters: seniority validation + skill validation + relevance scoring
 app.post("/api/source", async (req, res) => {
   const { companies, role, skills, seniority, location } = req.body;
   if (!companies?.length || !role) return res.status(400).json({ error: "companies and role are required" });
@@ -205,64 +203,109 @@ app.post("/api/source", async (req, res) => {
   const targets = companies.slice(0, 8);
   const normTargets = targets.map(t => t.toLowerCase().replace(/[^a-z0-9]/g, ""));
 
-  const topSkill    = skills?.[0] || "";
-  const secondSkill = skills?.[1] || "";
+  const mustSkills = (skills || []).filter(s => s && s.trim()).slice(0, 5);
 
   // LinkedIn subdomain by location
   const LINKEDIN_SITE = {
-    "United States": { site:"linkedin.com/in",  loc:"United States" },
-    "Canada":        { site:"ca.linkedin.com/in", loc:"" },
-    "India":         { site:"in.linkedin.com/in", loc:"" },
-    "United Kingdom":{ site:"uk.linkedin.com/in", loc:"" },
-    "Europe":        { site:"linkedin.com/in",  loc:"Europe" },
-    "Australia":     { site:"au.linkedin.com/in", loc:"" },
-    "Singapore":     { site:"sg.linkedin.com/in", loc:"" },
+    "United States": { site:"linkedin.com/in",    loc:"United States" },
+    "Canada":        { site:"ca.linkedin.com/in",  loc:"" },
+    "India":         { site:"in.linkedin.com/in",  loc:"" },
+    "United Kingdom":{ site:"uk.linkedin.com/in",  loc:"" },
+    "Europe":        { site:"linkedin.com/in",     loc:"Europe" },
+    "Australia":     { site:"au.linkedin.com/in",  loc:"" },
+    "Singapore":     { site:"sg.linkedin.com/in",  loc:"" },
   };
   const locConfig = LINKEDIN_SITE[location] || { site:"linkedin.com/in", loc:"" };
   const site = locConfig.site;
-  const locHint = locConfig.loc ? ` "${locConfig.loc}"` : "";
 
-  const mustSkills = (skills || []).filter(s => s && s.trim()).slice(0, 3);
-
-  // Seniority OR group
-  const SENIORITY_ADJACENT = {
-    "Intern":          ["Intern", "Associate", "Junior"],
-    "Junior":          ["Junior", "Associate"],
-    "Mid-Level":       ["Mid", "Senior", "Lead"],
-    "Senior":          ["Senior", "Lead", "Staff"],
-    "Lead":            ["Lead", "Senior", "Staff"],
-    "Staff":           ["Staff", "Lead", "Senior", "Principal"],
-    "Principal":       ["Principal", "Staff", "Director"],
-    "Manager":         ["Manager", "Senior Manager", "Lead"],
-    "Senior Manager":  ["Senior Manager", "Manager", "Director"],
-    "Director":        ["Director", "Senior Director", "Principal"],
-    "Senior Director": ["Senior Director", "Director", "VP"],
-    "VP":              ["VP", "Vice President", "Senior Director"],
-    "SVP":             ["SVP", "Senior Vice President", "VP"],
-    "C-Level":         ["Chief", "President", "C-Level"],
+  // Location as OR group — city-level for better recall
+  const LOCATION_CITIES = {
+    "India":          '(India OR Bangalore OR Bengaluru OR Mumbai OR Pune OR Hyderabad OR Delhi OR Chennai OR Gurugram OR Noida)',
+    "United States":  '("United States" OR "San Francisco" OR "New York" OR Seattle OR Austin OR "San Jose" OR Denver OR Boston OR Chicago)',
+    "United Kingdom": '("United Kingdom" OR London OR Manchester OR Edinburgh OR Bristol)',
+    "Europe":         '(Europe OR London OR Berlin OR Amsterdam OR Paris OR Dublin OR Barcelona OR Stockholm)',
+    "Canada":         '(Canada OR Toronto OR Vancouver OR Montreal OR Ottawa)',
+    "Australia":      '(Australia OR Sydney OR Melbourne OR Brisbane)',
+    "Singapore":      'Singapore',
   };
-  const seniorityLevels = SENIORITY_ADJACENT[seniority] || [seniority];
+  const locOR = LOCATION_CITIES[location] || "";
+  const locQ = locOR ? ` ${locOR}` : "";
 
   // Strip seniority prefix from role to get the core title
   const roleStem = role.replace(/^(Intern|Junior|Mid-Level|Senior|Lead|Staff|Principal|Manager|Director|VP|SVP)\s+/i, "").trim();
 
-  // Build queries — track which company each query maps to (fixes the i/2 bug)
-  const queryMeta = []; // { query, company }
-  targets.forEach(company => {
-    // q1: company + role stem + top skill (broad, reliable)
-    const q1 = topSkill
-      ? `site:${site} "${company}" "${roleStem}" "${topSkill}"${locHint}`
-      : `site:${site} "${company}" "${roleStem}"${locHint}`;
-    queryMeta.push({ query: q1, company });
+  // Build seniority-aware title variants for intitle: operator
+  // Maps the user's seniority to real LinkedIn title prefixes
+  const SENIORITY_TITLES = {
+    "Intern":          ["Intern", ""],
+    "Junior":          ["Junior", "Associate", ""],
+    "Mid-Level":       ["", "Senior"],
+    "Senior":          ["Senior", "Lead", ""],
+    "Lead":            ["Lead", "Senior", "Staff"],
+    "Staff":           ["Staff", "Senior", "Lead", "Principal"],
+    "Principal":       ["Principal", "Staff", "Distinguished"],
+    "Manager":         ["Manager", "Senior Manager", "Engineering Manager"],
+    "Senior Manager":  ["Senior Manager", "Manager", "Director"],
+    "Director":        ["Director", "Senior Director", "Head of"],
+    "Senior Director": ["Senior Director", "Director", "VP"],
+    "VP":              ["VP", "Vice President", "Head of", "Senior Director"],
+    "SVP":             ["SVP", "Senior Vice President", "VP"],
+    "C-Level":         ["Chief", "CTO", "CIO", "CDO", "President"],
+  };
 
-    // q2+: company + role stem + seniority level variants
-    seniorityLevels.slice(0, 2).forEach(level => {
-      const q = topSkill
-        ? `site:${site} "${company}" "${roleStem}" ${level} "${topSkill}"${locHint}`
-        : `site:${site} "${company}" "${roleStem}" ${level}${locHint}`;
-      queryMeta.push({ query: q, company });
-    });
+  const titlePrefixes = SENIORITY_TITLES[seniority] || [seniority, ""];
+  // Build actual title strings: "Staff Data Engineer", "Senior Data Engineer", etc.
+  const titleVariants = titlePrefixes
+    .map(p => p ? `"${p} ${roleStem}"` : `"${roleStem}"`)
+    .filter((v, i, a) => a.indexOf(v) === i); // dedupe
+  const titleOR = titleVariants.length > 1
+    ? `(${titleVariants.join(" OR ")})`
+    : titleVariants[0];
+
+  // Skills as OR group — any one skill match is sufficient for a query hit
+  const skillsOR = mustSkills.length > 1
+    ? `(${mustSkills.map(s => `"${s}"`).join(" OR ")})`
+    : mustSkills.length === 1 ? `"${mustSkills[0]}"` : "";
+
+  // Build queries — 3 strategies per company
+  const queryMeta = []; // { query, company, type }
+
+  targets.forEach(company => {
+    // Q1: intitle: with seniority title variants + company + skills + location (most precise)
+    if (skillsOR) {
+      queryMeta.push({
+        query: `site:${site} intitle:${titleOR} "${company}" ${skillsOR}${locQ} -recruiter -hiring -consultant`,
+        company, type: "title+company+skill"
+      });
+    } else {
+      queryMeta.push({
+        query: `site:${site} intitle:${titleOR} "${company}"${locQ} -recruiter -hiring -consultant`,
+        company, type: "title+company"
+      });
+    }
+
+    // Q2: company + roleStem keyword + skills (broader — catches non-standard titles)
+    if (skillsOR) {
+      queryMeta.push({
+        query: `site:${site} "${company}" "${roleStem}" ${skillsOR}${locQ}`,
+        company, type: "company+role+skill"
+      });
+    } else {
+      queryMeta.push({
+        query: `site:${site} "${company}" "${roleStem}"${locQ}`,
+        company, type: "company+role"
+      });
+    }
   });
+
+  // Q3: title + skills only (no company — catches people who recently moved)
+  // Only run a few of these to avoid too many API calls
+  if (skillsOR && targets.length > 0) {
+    queryMeta.push({
+      query: `site:${site} intitle:${titleOR} ${skillsOR}${locQ} -recruiter -hiring -consultant`,
+      company: "", type: "title+skill"
+    });
+  }
 
   let rawResults = [];
   try {
@@ -275,16 +318,16 @@ app.post("/api/source", async (req, res) => {
         }).then(r => r.json()).catch(() => ({ organic: [] }))
       )
     );
-    // Tag each result with the correct queried company
     rawResults = responses.flatMap((r, i) => {
-      const queryCompany = queryMeta[i].company;
-      return (r.organic || []).map(item => ({ ...item, _queryCompany: queryCompany }));
+      const meta = queryMeta[i];
+      return (r.organic || []).map(item => ({ ...item, _queryCompany: meta.company, _queryType: meta.type }));
     });
-    console.log(`[SOURCE] Raw Serper results: ${rawResults.length}`);
+    console.log(`[SOURCE] ${queryMeta.length} queries → ${rawResults.length} raw results`);
   } catch (err) {
     return res.status(500).json({ error: "Serper search failed: " + err.message });
   }
 
+  // ── Parse candidate from Serper result ──
   function parseCandidate(result) {
     const url = result.link || "";
     if (!url.includes("linkedin.com/in/")) return null;
@@ -292,52 +335,118 @@ app.post("/api/source", async (req, res) => {
     const snippet  = result.snippet || "";
     const rawTitle = result.title   || "";
 
-    // Name: everything before first " - " or " | "
-    const nameMatch = rawTitle.match(/^([^|\-]+?)(?:\s*[-|]|$)/);
-    const name = nameMatch ? nameMatch[1].trim() : "Unknown";
+    // LinkedIn title format: "Firstname Lastname - Current Title at Company | LinkedIn"
+    const nameMatch = rawTitle.match(/^([^|\-]{2,50}?)(?:\s*[-|]|$)/);
+    const name = nameMatch ? nameMatch[1].trim() : "";
+    if (!name || name.toLowerCase().includes("linkedin")) return null;
 
-    // Title: strip name, company suffix, LinkedIn suffix
-    const afterName = rawTitle.replace(/^[^-]+-\s*/, "");
-    const cleanedTitle = afterName
-      .replace(/\s*\|.*$/, "")
-      .replace(/\s*[@\uff20]\s*\S+.*$/, "")
-      .replace(/\s+at\s+.+$/i, "")
-      .trim();
+    // Extract current title — between first " - " and " | LinkedIn"
+    const titleMatch = rawTitle.match(/\s*-\s*(.+?)(?:\s*\|\s*LinkedIn)?$/i);
+    const currentTitle = titleMatch
+      ? titleMatch[1].replace(/\s+at\s+.+$/i, "").trim()
+      : "";
 
-    // Use the queried company as ground truth
-    const queriedCompany = result._queryCompany || "";
+    // Company: prefer what's in the title "... at Company", fall back to queried company
+    const atMatch = rawTitle.match(/\s+at\s+(.+?)(?:\s*\|\s*LinkedIn)?$/i);
+    const parsedCompany = atMatch ? atMatch[1].trim() : "";
+    const currentCompany = parsedCompany || result._queryCompany || "";
 
     const emailMatch = snippet.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
     const email = emailMatch ? emailMatch[0] : null;
 
-    const kw = [role, ...(skills || []), seniority || ""].map(k => k.toLowerCase());
-    const fullText = [name, cleanedTitle, queriedCompany, snippet].join(" ").toLowerCase();
-    const score = kw.reduce((n, k) => n + (k && fullText.includes(k) ? 1 : 0), 0);
-
-    return { name, currentTitle: cleanedTitle, currentCompany: queriedCompany, linkedinUrl: url, email, snippet, score };
+    return { name, currentTitle, currentCompany, linkedinUrl: url, email, snippet, _queryType: result._queryType };
   }
 
-  function isFromTargetCompany(c) {
-    if (!c.currentCompany) return false;
-    const compNorm = c.currentCompany.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const urlNorm  = c.linkedinUrl.toLowerCase();
-    return normTargets.some(t =>
-      compNorm.includes(t) || t.includes(compNorm) || urlNorm.includes(t)
-    );
+  // ── Seniority validation ──
+  // Check if the candidate's title matches the target seniority band
+  const SENIORITY_KEYWORDS = {
+    "Intern":          { must: ["intern"], block: [] },
+    "Junior":          { must: ["junior", "associate", "entry"], block: ["senior", "lead", "staff", "principal", "director", "vp", "head", "chief", "manager"] },
+    "Mid-Level":       { must: [], block: ["intern", "junior", "associate", "director", "vp", "head", "chief", "principal"] },
+    "Senior":          { must: ["senior", "sr", "lead"], block: ["junior", "intern", "director", "vp", "head", "chief", "principal", "staff", "distinguished"] },
+    "Lead":            { must: ["lead", "senior", "staff"], block: ["junior", "intern", "director", "vp", "head", "chief"] },
+    "Staff":           { must: ["staff", "principal", "senior", "lead"], block: ["junior", "intern", "associate", "vp", "director", "head", "chief"] },
+    "Principal":       { must: ["principal", "staff", "distinguished"], block: ["junior", "intern", "associate", "vp", "chief"] },
+    "Manager":         { must: ["manager", "lead"], block: ["intern", "junior", "director", "vp", "chief"] },
+    "Senior Manager":  { must: ["senior manager", "manager", "director"], block: ["intern", "junior"] },
+    "Director":        { must: ["director", "head"], block: ["intern", "junior", "associate"] },
+    "Senior Director": { must: ["senior director", "director", "vp"], block: ["intern", "junior", "associate"] },
+    "VP":              { must: ["vp", "vice president", "head", "director"], block: ["intern", "junior", "associate"] },
+    "SVP":             { must: ["svp", "senior vice president", "vp"], block: ["intern", "junior", "associate"] },
+    "C-Level":         { must: ["chief", "cto", "cio", "cdo", "ceo", "president"], block: ["intern", "junior", "associate"] },
+  };
+
+  function matchesSeniority(candidateTitle) {
+    if (!candidateTitle || !seniority) return true; // no title to check = let it through
+    const t = candidateTitle.toLowerCase();
+    const rules = SENIORITY_KEYWORDS[seniority];
+    if (!rules) return true;
+
+    // If title contains a blocked keyword, reject
+    if (rules.block.some(b => {
+      // "senior" shouldn't block "senior manager" when looking for Manager
+      // Check as word boundary
+      const re = new RegExp(`\\b${b}\\b`, "i");
+      return re.test(t);
+    })) {
+      // Exception: if a must-keyword is also present, don't block
+      // e.g. title "Senior Manager" when seniority=Manager — "senior" is in block but "manager" is in must
+      if (!rules.must.some(m => t.includes(m))) {
+        return false;
+      }
+    }
+
+    // If must-keywords defined, at least one should appear
+    if (rules.must.length > 0) {
+      return rules.must.some(m => t.includes(m));
+    }
+    return true;
   }
 
-  // Post-filter: snippet or title must contain at least one must-have skill
+  // ── Skill validation ──
+  // At least one must-have skill should appear in title or snippet
   function hasRequiredSkill(c) {
     if (!mustSkills.length) return true;
-    const text = [c.currentTitle, c.snippet].join(" ").toLowerCase();
+    const text = [c.currentTitle, c.snippet, c.currentCompany].join(" ").toLowerCase();
     return mustSkills.some(skill => {
       const s = skill.toLowerCase();
       if (text.includes(s)) return true;
-      const words = s.split(/\s+/).filter(w => w.length > 3);
+      // Multi-word skill: all significant words must appear
+      const words = s.split(/\s+/).filter(w => w.length > 2);
       return words.length > 1 && words.every(w => text.includes(w));
     });
   }
 
+  // ── Relevance scoring ──
+  function scoreCandidate(c) {
+    const titleLower = (c.currentTitle || "").toLowerCase();
+    const fullText = [c.name, c.currentTitle, c.currentCompany, c.snippet].join(" ").toLowerCase();
+    let score = 0;
+
+    // +3 if title contains the role stem
+    if (titleLower.includes(roleStem.toLowerCase())) score += 3;
+
+    // +2 for each matching skill
+    mustSkills.forEach(skill => {
+      if (fullText.includes(skill.toLowerCase())) score += 2;
+    });
+
+    // +2 if title matches a seniority variant
+    titlePrefixes.forEach(p => {
+      if (p && titleLower.includes(p.toLowerCase())) score += 2;
+    });
+
+    // +1 if from a target company
+    const compNorm = (c.currentCompany || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (normTargets.some(t => compNorm.includes(t) || t.includes(compNorm))) score += 1;
+
+    // +1 for title+company+skill query type (highest precision)
+    if (c._queryType === "title+company+skill") score += 1;
+
+    return score;
+  }
+
+  // ── Assemble results ──
   const seen = new Set();
   const candidates = rawResults
     .map(parseCandidate)
@@ -345,15 +454,27 @@ app.post("/api/source", async (req, res) => {
     .filter(c => {
       if (seen.has(c.linkedinUrl)) return false;
       seen.add(c.linkedinUrl);
-      if (!c.name || c.name === "Unknown") return false;
-      if (!isFromTargetCompany(c)) return false;
-      if (!hasRequiredSkill(c)) { console.log(`[FILTER] Excluded missing skills: ${c.name}`); return false; }
+      if (!c.name) return false;
+      return true;
+    })
+    .map(c => ({ ...c, score: scoreCandidate(c) }))
+    // Apply filters: seniority + skill
+    .filter(c => {
+      if (!matchesSeniority(c.currentTitle)) {
+        console.log(`[FILTER] Seniority mismatch: "${c.currentTitle}" (want ${seniority}) — ${c.name}`);
+        return false;
+      }
+      if (!hasRequiredSkill(c)) {
+        console.log(`[FILTER] Missing skills: ${c.name} — "${c.currentTitle}"`);
+        return false;
+      }
       return true;
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, 30);
+    .slice(0, 30)
+    .map(({ _queryType, ...c }) => c); // strip internal field before sending
 
-  console.log(`[SOURCE] After filters: ${candidates.length} candidates (role: ${role}, skills: ${mustSkills.join(", ")||"none"})`);
+  console.log(`[SOURCE] After filters: ${candidates.length} candidates (role: ${role}, seniority: ${seniority}, skills: ${mustSkills.join(", ")||"none"})`);
   res.json({ candidates });
 });
 
@@ -426,7 +547,6 @@ Return ONLY valid JSON, no markdown:
 
     const raw = await callLLM(prompt, 2000);
 
-    // Parse JSON
     let result;
     try {
       const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
