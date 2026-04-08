@@ -17,9 +17,8 @@ export default async function handler(req, res) {
     };
     const site = LINKEDIN_SITE[location] || "linkedin.com/in";
 
-    const prompt = `You are an expert technical recruiter and Boolean search specialist.
+    const prompt = `You are an expert recruiter writing Google X-ray search strings for LinkedIn.
 
-Generate intelligent Google X-ray search strings for LinkedIn to find candidates for this role:
 Role: ${role}
 Seniority: ${seniority}
 Location: ${location}
@@ -27,48 +26,41 @@ Skills: ${(skills||[]).join(", ")||"not specified"}
 Target Companies: ${(companies||[]).slice(0,6).join(", ")||"any"}
 LinkedIn site: ${site}
 
-TASK:
-1. First, deeply understand the skills — research their ecosystem. For each skill, identify:
-   - Alternative names / abbreviations (e.g. "Apache Iceberg" → also "Iceberg", "Open Table Format", "OTF")
-   - Related technologies in the same space (e.g. "Apache Iceberg" → "Delta Lake", "Apache Hudi", "Tabular")
-   - Communities/concepts people in this space use (e.g. "Lakehouse", "Open Table Format community")
+Generate 5 simple, practical X-ray search strings. Each string should be SHORT and actually work in Google.
 
-2. Generate a search strategy paragraph explaining who to target and why.
+FORMAT for every string:
+site:${site} intitle:(title variants as OR group) (skill/keyword terms) location -recruiter -noise
 
-3. Generate exactly 5 Boolean search strings using these Google X-ray operators:
-   - site:${site} — always include
-   - intitle:"term" — use for current job title (LinkedIn page title = current role)
-   - "quoted phrase" — exact match
-   - (term1 OR term2) — alternatives
-   - AND — must have (implicit between terms)
-   - -term — exclude (use -recruiter -hiring -consultant to filter noise)
+RULES:
+- Always start with site:${site}
+- Use intitle:("Title A" OR "Title B" OR "Title C") for job title matching — 3-5 real title alternatives
+- Add skill keywords or related technologies as an OR group: ("skill1" OR "skill2" OR "related_tech")
+- Add location as a simple keyword (e.g. "United States" or "India")
+- End with -recruiter -hiring to filter noise
+- Keep strings UNDER 200 characters. Shorter = better results.
+- Do NOT nest intitle: inside other operators. Do NOT use AND keyword (it's implicit in Google).
 
-CRITICAL RULE FOR TITLES: Never use the seniority as a plain keyword.
-Always generate real title alternatives as an OR group in intitle:.
-Examples:
-  VP Sales → intitle:("VP Sales" OR "Vice President Sales" OR "Head of Sales" OR "Sales Director")
-  Staff Engineer → intitle:("Staff Engineer" OR "Staff Software Engineer" OR "Principal Engineer")
-  Customer Success Manager → intitle:("Customer Success Manager" OR "Client Success Manager" OR "Customer Success Lead")
+WHAT MAKES EACH STRING DIFFERENT:
+1. Title variants + location (broadest — finds anyone with matching title)
+2. Title variants + skills/keywords + location (best balance of precision and recall)
+3. Title variants + related/adjacent technologies + location (finds people with transferable skills)
+4. Target companies OR group + title variants (finds people at specific companies)
+5. Title variants + niche ecosystem terms (finds specialists)
 
-Rules for strings:
-- String 1: intitle:(title OR alt1 OR alt2 OR alt3) site:linkedin + location keyword
-- String 2: intitle:(title OR alt) AND (skill1 OR skill_alt1 OR skill_alt2) AND location -noise
-- String 3: intitle:(seniority_variant title) AND (related_tech1 OR related_tech2) AND location
-- String 4: site:linkedin ("company1" OR "company2" OR "company3") AND intitle:(title OR alt) AND skill
-- String 5: niche community angle — use ecosystem terms, community names, conference names
-
-Every string MUST have title alternatives in an OR group. Never: intitle:"VP Sales" VP.
-Always: intitle:("VP Sales" OR "Vice President Sales" OR "Head of Sales")
+For skills, think about what ELSE these people mention on their profiles:
+- Alternative names: "Apache Iceberg" → also "Iceberg", "open table format"
+- Related tech: "Apache Iceberg" → "Delta Lake", "Apache Hudi", "Lakehouse"
+- For non-technical roles: industry terms, methodologies, tools they use
 
 Return ONLY valid JSON, no markdown:
 {
-  "strategy": "2-3 sentence paragraph about who to target and where they hide",
+  "strategy": "2-3 sentence paragraph about who to target",
   "strings": [
-    {"label": "Short label", "query": "full google search string here"},
-    {"label": "Short label", "query": "full google search string here"},
-    {"label": "Short label", "query": "full google search string here"},
-    {"label": "Short label", "query": "full google search string here"},
-    {"label": "Short label", "query": "full google search string here"}
+    {"label": "Short 3-5 word label", "query": "the actual google search string"},
+    {"label": "Short 3-5 word label", "query": "the actual google search string"},
+    {"label": "Short 3-5 word label", "query": "the actual google search string"},
+    {"label": "Short 3-5 word label", "query": "the actual google search string"},
+    {"label": "Short 3-5 word label", "query": "the actual google search string"}
   ]
 }`;
 
