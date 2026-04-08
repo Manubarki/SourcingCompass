@@ -1,5 +1,50 @@
 import { useState, useRef, useEffect } from "react";
 
+// ─── Client-side JSON repair for truncated LLM responses ─────────────────────
+function repairJSON(raw) {
+  const s = raw.indexOf("{");
+  if (s === -1) return raw;
+  const e = raw.lastIndexOf("}");
+  let clean = e !== -1 ? raw.slice(s, e + 1) : raw.slice(s);
+  clean = clean
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "")
+    .replace(/,\s*([}\]])/g, "$1");
+  try { JSON.parse(clean); return clean; } catch {}
+  function tryCloseFrom(str) {
+    let trimmed = str.replace(/,\s*$/, "");
+    let inStr = false, esc = false, opens = 0, openSq = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\' && inStr) { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === '{') opens++; else if (ch === '}') opens--;
+      if (ch === '[') openSq++; else if (ch === ']') openSq--;
+    }
+    if (inStr) return null;
+    const closed = trimmed + "]".repeat(Math.max(0, openSq)) + "}".repeat(Math.max(0, opens));
+    try { JSON.parse(closed); return closed; } catch { return null; }
+  }
+  let result = tryCloseFrom(clean);
+  if (result) return result;
+  let inStr = false, esc = false, lastSafeComma = -1, depth = 0;
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\' && inStr) { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+    else if (ch === ',' && depth > 0) lastSafeComma = i;
+  }
+  if (lastSafeComma === -1) return raw;
+  result = tryCloseFrom(clean.slice(0, lastSafeComma));
+  if (result) return result;
+  return raw;
+}
+
 const DOC_CONTEXT = `SourcingCompass is a talent intelligence tool that answers "where do people like this actually work?" — generating an AI-powered map of the talent landscape for any role in under 30 seconds.
 
 HOW TO USE:
@@ -924,8 +969,7 @@ export default function TalentMap() {
         body:JSON.stringify({messages:[{role:"user",content:'Extract from JD, return ONLY raw JSON: {"role":"title","seniority":"Senior/Staff/etc","skills":["s1"]} JD: '+txt.slice(0,2000)}]})});
       const data=await res.json();
       const raw=data.content?.map(b=>b.text||"").join("").trim();
-      let clean=raw.replace(/```json|```/g,"").trim();
-      const lb=clean.lastIndexOf("}"); if(lb!==-1) clean=clean.slice(0,lb+1);
+      const clean=repairJSON(raw.replace(/```json|```/g,"").trim());
       const parsed=JSON.parse(clean);
       setForm(f=>({...f,role:parsed.role||f.role,seniority:parsed.seniority||f.seniority,skills:parsed.skills?.length?parsed.skills:f.skills}));
       setShowJD(false);
@@ -947,7 +991,8 @@ export default function TalentMap() {
       const data=await res.json();
       if(!res.ok){setError("API error "+res.status+": "+JSON.stringify(data));setLoading(false);return;}
       const raw=data.content?.map(b=>b.text||"").join("").trim();
-      const parsed=JSON.parse(raw.replace(/```json|```/g,"").trim());
+      const cleaned=repairJSON(raw.replace(/```json|```/g,"").trim());
+      const parsed=JSON.parse(cleaned);
       setMapData({...EMPTY,...parsed}); setGenerated(true);
     } catch(e){if(e.name!=="AbortError")setError("Error: "+e.message);}
     setLoading(false);
