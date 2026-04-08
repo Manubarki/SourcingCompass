@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
     const companies = await getMemory();
     const companyList = companies.length > 0
-      ? "\n\nVERIFIED COMPANY LIST — for Target Companies ONLY use companies from this list. Adjacent and Wildcards may go beyond this list but must still be real, active companies:\n" + getRelevant(companies, role, skills, industries)
+      ? "\n\nREFERENCE COMPANY LIST (tech/data companies) — use as a starting point for Target Companies. You may pick companies from this list OR use other well-known companies that are more relevant to the ROLE above. Adjacent and Wildcards should go beyond this list. IMPORTANT: Describe every company from the perspective of the searched ROLE, not from the company's engineering side. For a VP Sales search, describe sales teams, GTM motions, and revenue signals — NOT engineering infrastructure:\n" + getRelevant(companies, role, skills, industries)
       : "";
 
     const SYSTEM_JSON = "You output ONLY valid compact single-line JSON. No newlines inside the JSON. No markdown. No backticks. No explanation before or after. Every string value must be concise (under 120 chars). CRITICAL: All companies, profiles, signals, and titles must be specific to the role and skills requested — never default to engineering examples.";
