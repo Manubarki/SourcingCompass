@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       ? "\n\nVERIFIED COMPANY LIST — for Target Companies ONLY use companies from this list. Adjacent and Wildcards may go beyond this list but must still be real, active companies:\n" + getRelevant(companies, role, skills, industries)
       : "";
 
-    const SYSTEM_JSON = "You output ONLY valid compact single-line JSON. No newlines inside the JSON. No markdown. No backticks. No explanation before or after. Every string value must be concise (under 120 chars).";
+    const SYSTEM_JSON = "You output ONLY valid compact single-line JSON. No newlines inside the JSON. No markdown. No backticks. No explanation before or after. Every string value must be concise (under 120 chars). CRITICAL: All companies, profiles, signals, and titles must be specific to the role and skills requested — never default to engineering examples.";
     const raw = await callLLM(prompt + companyList, 8192, SYSTEM_JSON);
     const text = repairJSON(raw);
 
