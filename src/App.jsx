@@ -909,7 +909,7 @@ function buildPrompt(form) {
     "CRITICAL: Tailor ALL output to the specific role above. Companies, profiles, signals, titles must match the ROLE and SKILLS — not generic engineering.",
     "",
     "RULES:",
-    "1. companies — ONLY use names from the VERIFIED COMPANY LIST below. NOT open source projects/frameworks/tools. Pick 6. Each company must be relevant to the ROLE above.",
+    "1. companies — Prefer companies from the REFERENCE LIST below, but you may use other well-known companies if more relevant to the ROLE. NOT open source projects/frameworks/tools. Pick 6. Describe each from the perspective of the searched ROLE.",
     "2. adjacent — 4 real companies with transferable skills for THIS specific role.",
     "3. wildcards — 3 surprising companies for THIS role. BANNED: Airbnb, Netflix, Uber, Meta, Google, Amazon, Apple, Microsoft, Stripe.",
     "4. titles — 5 real LinkedIn job titles for THIS role. Include seniority + functional variants. Combine similar with OR syntax.",
