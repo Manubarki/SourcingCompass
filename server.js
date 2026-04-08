@@ -258,7 +258,7 @@ app.post("/api/source", async (req, res) => {
   };
 
   const titlePrefixes = SENIORITY_TITLES[seniority] || [seniority, ""];
-  // Build actual title strings: "Staff Data Engineer", "Senior Data Engineer", etc.
+  // Build actual title strings: "VP Sales", "Vice President Sales", etc.
   const titleVariants = titlePrefixes
     .map(p => p ? `"${p} ${roleStem}"` : `"${roleStem}"`)
     .filter((v, i, a) => a.indexOf(v) === i); // dedupe
@@ -271,42 +271,40 @@ app.post("/api/source", async (req, res) => {
     ? `(${mustSkills.map(s => `"${s}"`).join(" OR ")})`
     : mustSkills.length === 1 ? `"${mustSkills[0]}"` : "";
 
-  // Build queries — 3 strategies per company
+  // Build queries — keep them SHORT for better Serper results
+  // Google X-ray works best with fewer terms; the LinkedIn subdomain already handles location
   const queryMeta = []; // { query, company, type }
 
   targets.forEach(company => {
-    // Q1: intitle: with seniority title variants + company + skills + location (most precise)
-    if (skillsOR) {
-      queryMeta.push({
-        query: `site:${site} intitle:${titleOR} "${company}" ${skillsOR}${locQ} -recruiter -hiring -consultant`,
-        company, type: "title+company+skill"
-      });
-    } else {
-      queryMeta.push({
-        query: `site:${site} intitle:${titleOR} "${company}"${locQ} -recruiter -hiring -consultant`,
-        company, type: "title+company"
-      });
-    }
+    // Q1: intitle: seniority title variants + company (precise, no location clutter)
+    queryMeta.push({
+      query: `site:${site} intitle:${titleOR} "${company}" -recruiter -hiring`,
+      company, type: "title+company"
+    });
 
-    // Q2: company + roleStem keyword + skills (broader — catches non-standard titles)
+    // Q2: company + full role (e.g. "VP Sales" not just "Sales") — catches variant titles
+    queryMeta.push({
+      query: `site:${site} "${company}" "${role}"${locQ ? " " + locOR : ""}`,
+      company, type: "company+fullrole"
+    });
+
+    // Q3: if skills exist, company + skills + roleStem
     if (skillsOR) {
       queryMeta.push({
-        query: `site:${site} "${company}" "${roleStem}" ${skillsOR}${locQ}`,
+        query: `site:${site} "${company}" "${roleStem}" ${skillsOR}`,
         company, type: "company+role+skill"
-      });
-    } else {
-      queryMeta.push({
-        query: `site:${site} "${company}" "${roleStem}"${locQ}`,
-        company, type: "company+role"
       });
     }
   });
 
-  // Q3: title + skills only (no company — catches people who recently moved)
-  // Only run a few of these to avoid too many API calls
-  if (skillsOR && targets.length > 0) {
+  // Q4: title-only query (no company) — catches people who recently moved
+  queryMeta.push({
+    query: `site:${site} intitle:${titleOR}${locQ ? " " + locOR : ""} -recruiter -hiring`,
+    company: "", type: "title+loc"
+  });
+  if (skillsOR) {
     queryMeta.push({
-      query: `site:${site} intitle:${titleOR} ${skillsOR}${locQ} -recruiter -hiring -consultant`,
+      query: `site:${site} intitle:${titleOR} ${skillsOR} -recruiter -hiring`,
       company: "", type: "title+skill"
     });
   }
@@ -407,6 +405,23 @@ app.post("/api/source", async (req, res) => {
     return true;
   }
 
+  // ── Role relevance filter ──
+  // The candidate's title or snippet must mention the role function
+  // e.g. for "VP Sales", title/snippet must contain "sales"
+  // This prevents "Sr Director Software Engineering" from appearing in a Sales search
+  function matchesRole(c) {
+    const stemLower = roleStem.toLowerCase();
+    // Skip this filter if roleStem is very short/generic (< 3 chars)
+    if (stemLower.length < 3) return true;
+    const text = [c.currentTitle, c.snippet].join(" ").toLowerCase();
+    // Check for the role stem
+    if (text.includes(stemLower)) return true;
+    // Check individual words of multi-word stems (e.g. "Data Engineer" -> "data" AND "engineer")
+    const words = stemLower.split(/\s+/).filter(w => w.length > 2);
+    if (words.length > 1) return words.every(w => text.includes(w));
+    return false;
+  }
+
   // ── Skill validation ──
   // At least one must-have skill should appear in title or snippet
   function hasRequiredSkill(c) {
@@ -462,8 +477,12 @@ app.post("/api/source", async (req, res) => {
       return true;
     })
     .map(c => ({ ...c, score: scoreCandidate(c) }))
-    // Apply filters: seniority + skill
+    // Apply filters: role relevance + seniority + skill
     .filter(c => {
+      if (!matchesRole(c)) {
+        console.log(`[FILTER] Role mismatch: "${c.currentTitle}" (want ${roleStem}) — ${c.name}`);
+        return false;
+      }
       if (!matchesSeniority(c.currentTitle)) {
         console.log(`[FILTER] Seniority mismatch: "${c.currentTitle}" (want ${seniority}) — ${c.name}`);
         return false;
