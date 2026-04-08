@@ -1,7 +1,6 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Parse body — Vercel passes raw body
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   if (!body) body = {};
@@ -13,109 +12,140 @@ export default async function handler(req, res) {
   if (!SERPER_KEY) return res.status(500).json({ error: "SERPER_API_KEY not configured" });
 
   const targets = companies.slice(0, 8);
-  const mustSkills = (skills || []).filter(s => s && s.trim());
-  const topSkill = mustSkills[0] || "";
+  const normTargets = targets.map(t => t.toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const mustSkills = (skills || []).filter(s => s && s.trim()).slice(0, 5);
 
   // LinkedIn subdomain by location
   const LINKEDIN_SITE = {
-    "United States":  { site: "linkedin.com/in",   loc: "United States" },
-    "Canada":         { site: "ca.linkedin.com/in", loc: "" },
-    "India":          { site: "in.linkedin.com/in", loc: "" },
-    "United Kingdom": { site: "uk.linkedin.com/in", loc: "" },
-    "Europe":         { site: "linkedin.com/in",    loc: "Europe" },
-    "Australia":      { site: "au.linkedin.com/in", loc: "" },
-    "Singapore":      { site: "sg.linkedin.com/in", loc: "" },
+    "United States":  { site: "linkedin.com/in",    loc: "United States" },
+    "Canada":         { site: "ca.linkedin.com/in",  loc: "" },
+    "India":          { site: "in.linkedin.com/in",  loc: "" },
+    "United Kingdom": { site: "uk.linkedin.com/in",  loc: "" },
+    "Europe":         { site: "linkedin.com/in",     loc: "Europe" },
+    "Australia":      { site: "au.linkedin.com/in",  loc: "" },
+    "Singapore":      { site: "sg.linkedin.com/in",  loc: "" },
   };
   const locConfig = LINKEDIN_SITE[location] || { site: "linkedin.com/in", loc: "" };
   const site = locConfig.site;
-  const locHint = locConfig.loc ? ` "${locConfig.loc}"` : "";
 
-  // Strip seniority prefix to get core role
-  // "Staff Customer Success Manager" -> "Customer Success Manager"
+  // Location as OR group — city-level for better recall
+  const LOCATION_CITIES = {
+    "India":          '(India OR Bangalore OR Bengaluru OR Mumbai OR Pune OR Hyderabad OR Delhi OR Chennai OR Gurugram OR Noida)',
+    "United States":  '("United States" OR "San Francisco" OR "New York" OR Seattle OR Austin OR "San Jose" OR Denver OR Boston OR Chicago)',
+    "United Kingdom": '("United Kingdom" OR London OR Manchester OR Edinburgh OR Bristol)',
+    "Europe":         '(Europe OR London OR Berlin OR Amsterdam OR Paris OR Dublin OR Barcelona OR Stockholm)',
+    "Canada":         '(Canada OR Toronto OR Vancouver OR Montreal OR Ottawa)',
+    "Australia":      '(Australia OR Sydney OR Melbourne OR Brisbane)',
+    "Singapore":      'Singapore',
+  };
+  const locOR = LOCATION_CITIES[location] || "";
+  const locQ = locOR ? ` ${locOR}` : "";
+
+  // Strip seniority prefix from role to get core title
   const roleStem = role
     .replace(/^(Intern|Junior|Mid-Level|Senior|Lead|Staff|Principal|Manager|Director|VP|SVP)\s+/i, "")
     .trim();
 
-  // Seniority alternatives — what this level is called in the real world
-  const SENIORITY_VARIANTS = {
-    "Intern":          ["Intern", "Junior"],
-    "Junior":          ["Junior", "Associate"],
-    "Mid-Level":       ["Senior", "Lead"],
-    "Senior":          ["Senior", "Lead"],
+  // Build seniority-aware title variants for intitle: operator
+  const SENIORITY_TITLES = {
+    "Intern":          ["Intern", ""],
+    "Junior":          ["Junior", "Associate", ""],
+    "Mid-Level":       ["", "Senior"],
+    "Senior":          ["Senior", "Lead", ""],
     "Lead":            ["Lead", "Senior", "Staff"],
     "Staff":           ["Staff", "Senior", "Lead", "Principal"],
-    "Principal":       ["Principal", "Staff", "Director"],
-    "Manager":         ["Manager", "Senior Manager"],
+    "Principal":       ["Principal", "Staff", "Distinguished"],
+    "Manager":         ["Manager", "Senior Manager", "Engineering Manager"],
     "Senior Manager":  ["Senior Manager", "Manager", "Director"],
-    "Director":        ["Director", "Senior Director"],
+    "Director":        ["Director", "Senior Director", "Head of"],
     "Senior Director": ["Senior Director", "Director", "VP"],
-    "VP":              ["VP", "Vice President"],
-    "SVP":             ["SVP", "VP"],
-    "C-Level":         ["Chief", "President"],
+    "VP":              ["VP", "Vice President", "Head of", "Senior Director"],
+    "SVP":             ["SVP", "Senior Vice President", "VP"],
+    "C-Level":         ["Chief", "CTO", "CIO", "CDO", "President"],
   };
-  const senVariants = SENIORITY_VARIANTS[seniority] || [seniority];
 
-  // Skills as OR — any one of them in the profile is sufficient
+  const titlePrefixes = SENIORITY_TITLES[seniority] || [seniority, ""];
+  const titleVariants = titlePrefixes
+    .map(p => p ? `"${p} ${roleStem}"` : `"${roleStem}"`)
+    .filter((v, i, a) => a.indexOf(v) === i);
+  const titleOR = titleVariants.length > 1
+    ? `(${titleVariants.join(" OR ")})`
+    : titleVariants[0];
+
+  // Skills as OR group
   const skillsOR = mustSkills.length > 1
-    ? `(${mustSkills.map(s=>`"${s}"`).join(" OR ")})`
+    ? `(${mustSkills.map(s => `"${s}"`).join(" OR ")})`
     : mustSkills.length === 1 ? `"${mustSkills[0]}"` : "";
 
-  // Location as OR group — city-level matching for better recall
-  const LOCATION_CITIES = {
-    "India":          "(India OR Bangalore OR Bengaluru OR Mumbai OR Pune OR Hyderabad OR Delhi OR Chennai)",
-    "United States":  `("United States" OR "San Francisco" OR "New York" OR Seattle OR Austin)`,
-    "United Kingdom": `("United Kingdom" OR London OR Manchester)`,
-    "Europe":         "(Europe OR London OR Berlin OR Amsterdam OR Paris OR Dublin)",
-    "Canada":         "(Canada OR Toronto OR Vancouver OR Montreal)",
-    "Australia":      "(Australia OR Sydney OR Melbourne)",
-    "Singapore":      "Singapore",
-  };
-  const locationOR = LOCATION_CITIES[location] || (locHint ? locHint.trim().replace(/^"|"$/g,"") : "");
-  const locQ = locationOR ? ` AND ${locationOR}` : "";
+  // Build queries — 3 strategies per company
+  const queryMeta = [];
 
-  const queries = [];
   targets.forEach(company => {
-    // Q1: intitle:roleStem + company + skills OR + location — proper Boolean
-    queries.push(
-      skillsOR
-        ? `site:${site} intitle:"${roleStem}" AND "${company}" AND ${skillsOR}${locQ} -recruiter -hiring`
-        : `site:${site} intitle:"${roleStem}" AND "${company}"${locQ} -recruiter -hiring`
-    );
-    // Q2: keyword search — no intitle, catches variant titles
-    queries.push(
-      skillsOR
-        ? `site:${site} "${company}" AND "${roleStem}" AND ${skillsOR}${locQ}`
-        : `site:${site} "${company}" AND "${roleStem}"${locQ}`
-    );
-    // Q3: seniority variant + company (e.g. "Senior" when user picked "Staff")
-    if (senVariants[1]) {
-      queries.push(`site:${site} "${company}" AND "${senVariants[1]} ${roleStem}"${locQ}`);
+    // Q1: intitle: with seniority title variants + company + skills + location
+    if (skillsOR) {
+      queryMeta.push({
+        query: `site:${site} intitle:${titleOR} "${company}" ${skillsOR}${locQ} -recruiter -hiring -consultant`,
+        company, type: "title+company+skill"
+      });
+    } else {
+      queryMeta.push({
+        query: `site:${site} intitle:${titleOR} "${company}"${locQ} -recruiter -hiring -consultant`,
+        company, type: "title+company"
+      });
+    }
+
+    // Q2: company + roleStem keyword + skills (broader)
+    if (skillsOR) {
+      queryMeta.push({
+        query: `site:${site} "${company}" "${roleStem}" ${skillsOR}${locQ}`,
+        company, type: "company+role+skill"
+      });
+    } else {
+      queryMeta.push({
+        query: `site:${site} "${company}" "${roleStem}"${locQ}`,
+        company, type: "company+role"
+      });
     }
   });
 
-  const uniqueQueries = [...new Set(queries)];
+  // Q3: title + skills only — catches people who recently moved
+  if (skillsOR && targets.length > 0) {
+    queryMeta.push({
+      query: `site:${site} intitle:${titleOR} ${skillsOR}${locQ} -recruiter -hiring -consultant`,
+      company: "", type: "title+skill"
+    });
+  }
+
+  const uniqueQueries = [];
+  const uniqueSet = new Set();
+  queryMeta.forEach(m => {
+    if (!uniqueSet.has(m.query)) {
+      uniqueSet.add(m.query);
+      uniqueQueries.push(m);
+    }
+  });
 
   let rawResults = [];
   try {
     const responses = await Promise.all(
-      uniqueQueries.map(q =>
+      uniqueQueries.map(({ query }) =>
         fetch("https://google.serper.dev/search", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-API-KEY": SERPER_KEY },
-          body: JSON.stringify({ q, num: 10 }),
+          body: JSON.stringify({ q: query, num: 10 }),
         }).then(r => r.json()).catch(() => ({ organic: [] }))
       )
     );
 
-    rawResults = responses.flatMap((r, qi) => {
-      // Ground truth company from the query
-      const queryCompany = targets.find(t => uniqueQueries[qi]?.includes(`"${t}"`)) || "";
-      return (r.organic || []).map(item => ({ ...item, _queryCompany: queryCompany }));
+    rawResults = responses.flatMap((r, i) => {
+      const meta = uniqueQueries[i];
+      return (r.organic || []).map(item => ({ ...item, _queryCompany: meta.company, _queryType: meta.type }));
     });
   } catch (err) {
     return res.status(500).json({ error: "Serper search failed: " + err.message });
   }
 
+  // ── Parse candidate ──
   function parseCandidate(result) {
     const url = result.link || "";
     if (!url.includes("linkedin.com/in/")) return null;
@@ -123,42 +153,99 @@ export default async function handler(req, res) {
     const snippet  = result.snippet || "";
     const rawTitle = result.title   || "";
 
-    // LinkedIn page title format: "Firstname Lastname - Current Title at Company | LinkedIn"
     const nameMatch = rawTitle.match(/^([^|\-]{2,50}?)(?:\s*[-|]|$)/);
     const name = nameMatch ? nameMatch[1].trim() : "";
     if (!name || name.toLowerCase().includes("linkedin")) return null;
 
-    // Extract current title — everything between first " - " and " | LinkedIn"
     const titleMatch = rawTitle.match(/\s*-\s*(.+?)(?:\s*\|\s*LinkedIn)?$/i);
     const currentTitle = titleMatch
       ? titleMatch[1].replace(/\s+at\s+.+$/i, "").trim()
       : "";
 
-    const queriedCompany = result._queryCompany || "";
+    const atMatch = rawTitle.match(/\s+at\s+(.+?)(?:\s*\|\s*LinkedIn)?$/i);
+    const parsedCompany = atMatch ? atMatch[1].trim() : "";
+    const currentCompany = parsedCompany || result._queryCompany || "";
+
     const emailMatch = snippet.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
     const email = emailMatch ? emailMatch[0] : null;
 
-    // Score by relevance
-    const kw = [role, roleStem, ...(mustSkills), seniority || ""].map(k => k.toLowerCase()).filter(Boolean);
-    const fullText = [name, currentTitle, queriedCompany, snippet].join(" ").toLowerCase();
-    const score = kw.reduce((n, k) => n + (fullText.includes(k) ? 1 : 0), 0);
-
-    return { name, currentTitle, currentCompany: queriedCompany, linkedinUrl: url, email, snippet, score };
+    return { name, currentTitle, currentCompany, linkedinUrl: url, email, snippet, _queryType: result._queryType };
   }
 
-  // Post-filter: if must-have skills entered, at least one must appear in snippet
+  // ── Seniority validation ──
+  const SENIORITY_KEYWORDS = {
+    "Intern":          { must: ["intern"], block: [] },
+    "Junior":          { must: ["junior", "associate", "entry"], block: ["senior", "lead", "staff", "principal", "director", "vp", "head", "chief", "manager"] },
+    "Mid-Level":       { must: [], block: ["intern", "junior", "associate", "director", "vp", "head", "chief", "principal"] },
+    "Senior":          { must: ["senior", "sr", "lead"], block: ["junior", "intern", "director", "vp", "head", "chief", "principal", "staff", "distinguished"] },
+    "Lead":            { must: ["lead", "senior", "staff"], block: ["junior", "intern", "director", "vp", "head", "chief"] },
+    "Staff":           { must: ["staff", "principal", "senior", "lead"], block: ["junior", "intern", "associate", "vp", "director", "head", "chief"] },
+    "Principal":       { must: ["principal", "staff", "distinguished"], block: ["junior", "intern", "associate", "vp", "chief"] },
+    "Manager":         { must: ["manager", "lead"], block: ["intern", "junior", "director", "vp", "chief"] },
+    "Senior Manager":  { must: ["senior manager", "manager", "director"], block: ["intern", "junior"] },
+    "Director":        { must: ["director", "head"], block: ["intern", "junior", "associate"] },
+    "Senior Director": { must: ["senior director", "director", "vp"], block: ["intern", "junior", "associate"] },
+    "VP":              { must: ["vp", "vice president", "head", "director"], block: ["intern", "junior", "associate"] },
+    "SVP":             { must: ["svp", "senior vice president", "vp"], block: ["intern", "junior", "associate"] },
+    "C-Level":         { must: ["chief", "cto", "cio", "cdo", "ceo", "president"], block: ["intern", "junior", "associate"] },
+  };
+
+  function matchesSeniority(candidateTitle) {
+    if (!candidateTitle || !seniority) return true;
+    const t = candidateTitle.toLowerCase();
+    const rules = SENIORITY_KEYWORDS[seniority];
+    if (!rules) return true;
+
+    if (rules.block.some(b => {
+      const re = new RegExp(`\\b${b}\\b`, "i");
+      return re.test(t);
+    })) {
+      if (!rules.must.some(m => t.includes(m))) return false;
+    }
+
+    if (rules.must.length > 0) {
+      return rules.must.some(m => t.includes(m));
+    }
+    return true;
+  }
+
+  // ── Skill validation ──
   function hasRequiredSkill(c) {
     if (!mustSkills.length) return true;
-    const text = [c.currentTitle, c.snippet].join(" ").toLowerCase();
+    const text = [c.currentTitle, c.snippet, c.currentCompany].join(" ").toLowerCase();
     return mustSkills.some(skill => {
       const s = skill.toLowerCase();
       if (text.includes(s)) return true;
-      // Multi-word skill: all words must appear (handles "data governance" -> "data" AND "governance")
-      const words = s.split(/\s+/).filter(w => w.length > 3);
+      const words = s.split(/\s+/).filter(w => w.length > 2);
       return words.length > 1 && words.every(w => text.includes(w));
     });
   }
 
+  // ── Relevance scoring ──
+  function scoreCandidate(c) {
+    const titleLower = (c.currentTitle || "").toLowerCase();
+    const fullText = [c.name, c.currentTitle, c.currentCompany, c.snippet].join(" ").toLowerCase();
+    let score = 0;
+
+    if (titleLower.includes(roleStem.toLowerCase())) score += 3;
+
+    mustSkills.forEach(skill => {
+      if (fullText.includes(skill.toLowerCase())) score += 2;
+    });
+
+    titlePrefixes.forEach(p => {
+      if (p && titleLower.includes(p.toLowerCase())) score += 2;
+    });
+
+    const compNorm = (c.currentCompany || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (normTargets.some(t => compNorm.includes(t) || t.includes(compNorm))) score += 1;
+
+    if (c._queryType === "title+company+skill") score += 1;
+
+    return score;
+  }
+
+  // ── Assemble results ──
   const seen = new Set();
   const candidates = rawResults
     .map(parseCandidate)
@@ -167,11 +254,17 @@ export default async function handler(req, res) {
       if (seen.has(c.linkedinUrl)) return false;
       seen.add(c.linkedinUrl);
       if (!c.name) return false;
+      return true;
+    })
+    .map(c => ({ ...c, score: scoreCandidate(c) }))
+    .filter(c => {
+      if (!matchesSeniority(c.currentTitle)) return false;
       if (!hasRequiredSkill(c)) return false;
       return true;
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, 30);
+    .slice(0, 30)
+    .map(({ _queryType, ...c }) => c);
 
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.json({ candidates });
