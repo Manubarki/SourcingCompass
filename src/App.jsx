@@ -62,9 +62,6 @@ SCORES EXPLAINED:
 - Talent Density: how concentrated relevant talent is. A 50-person AI startup can have higher density than a huge enterprise.
 - Poachability signals: [Confirmed] = specific reported fact (layoffs, markdowns). [Signal] = inferred pattern (slow promotions, equity underwater). Use to tailor outreach angle, not to quote directly.
 
-CANDIDATES TAB (pink):
-Live Google X-ray sourcing via Serper across target companies. Shows real LinkedIn profiles. Always verify before outreach.
-
 JD PARSER:
 Paste any job description → auto-extracts role title, seniority, key skills. Edit tags manually if needed (× to remove, type + Enter to add).
 
@@ -290,222 +287,6 @@ function Section({ cat, nodes }) {
   );
 }
 
-// ─── Candidate card ───────────────────────────────────────────────────────────
-// Highlight keywords in text — wraps matches in a styled span
-function highlight(text, keywords) {
-  if (!text || !keywords?.length) return <span>{text}</span>;
-  const clean = keywords.filter(k => k && k.length > 2);
-  if (!clean.length) return <span>{text}</span>;
-  const pattern = new RegExp(`(${clean.map(k => k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")})`, "gi");
-  const parts = text.split(pattern);
-  return (
-    <span>
-      {parts.map((part, i) =>
-        pattern.test(part)
-          ? <mark key={i} style={{background:"#fef3c7",color:"#92400e",borderRadius:"3px",padding:"0 2px",fontWeight:600}}>{part}</mark>
-          : <span key={i}>{part}</span>
-      )}
-    </span>
-  );
-}
-
-function CandidateCard({ candidate, index, keywords }) {
-  const initials = candidate.name.split(" ").slice(0,2).map(w=>w[0]||"").join("").toUpperCase()||"?";
-  const colors = ["#4d64d8","#1da882","#9b6ef5","#f6720d","#f04e7c"];
-  const color = colors[index % colors.length];
-  return (
-    <div style={{
-      background:"#ffffff", border:"1px solid #e5e7eb", borderRadius:"12px",
-      padding:"16px", transition:"box-shadow .15s, border-color .15s",
-      borderLeft:`3px solid ${color}`,
-    }}
-      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.08)";e.currentTarget.style.borderColor=color;}}
-      onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor="#e5e7eb";e.currentTarget.style.borderLeftColor=color;}}>
-
-      {/* Header row */}
-      <div style={{display:"flex",alignItems:"flex-start",gap:"12px"}}>
-        {/* Avatar */}
-        <div style={{
-          width:"44px",height:"44px",borderRadius:"50%",flexShrink:0,
-          display:"flex",alignItems:"center",justifyContent:"center",
-          fontSize:"13px",fontWeight:700,fontFamily:"Inter,sans-serif",
-          background:`${color}15`,border:`1.5px solid ${color}40`,color,
-        }}>{initials}</div>
-
-        {/* Name + title + company */}
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"8px"}}>
-            <div>
-              <div style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif"}}>
-                {candidate.name}
-              </div>
-              {candidate.currentTitle && (
-                <div style={{fontSize:"12px",color:"#6b7280",marginTop:"2px",fontFamily:"Inter,sans-serif"}}>
-                  {highlight(candidate.currentTitle, keywords)}
-                </div>
-              )}
-              {candidate.currentCompany && (
-                <div style={{display:"flex",alignItems:"center",gap:"5px",marginTop:"4px"}}>
-                  <div style={{width:"6px",height:"6px",borderRadius:"50%",background:color,flexShrink:0}}/>
-                  <span style={{fontSize:"12px",fontWeight:600,color,fontFamily:"Inter,sans-serif"}}>{candidate.currentCompany}</span>
-                </div>
-              )}
-            </div>
-            <a href={candidate.linkedinUrl} target="_blank" rel="noopener noreferrer"
-              style={{flexShrink:0,display:"flex",alignItems:"center",gap:"5px",padding:"6px 12px",
-                borderRadius:"6px",fontSize:"11px",fontWeight:600,color:"#fff",
-                background:"linear-gradient(135deg,#0077b5,#0a66c2)",textDecoration:"none"}}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-              </svg>
-              View
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* Email */}
-      {candidate.email && (
-        <div style={{marginTop:"10px",display:"flex",alignItems:"center",gap:"6px",
-          padding:"6px 10px",borderRadius:"6px",background:"#f0fdf9",border:"1px solid #a7f3d0"}}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1da882" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-          </svg>
-          <span style={{fontSize:"11px",color:"#1da882",fontWeight:600,fontFamily:"Inter,sans-serif"}}>{candidate.email}</span>
-        </div>
-      )}
-
-      {/* Snippet with keyword highlighting */}
-      {candidate.snippet && (
-        <div style={{marginTop:"10px",padding:"10px 12px",background:"#f9fafb",borderRadius:"8px",
-          border:"1px solid #f3f4f6"}}>
-          <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",
-            letterSpacing:"0.08em",marginBottom:"5px",fontFamily:"Inter,sans-serif"}}>Profile snippet</div>
-          <p style={{fontSize:"12px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>
-            {highlight(candidate.snippet, keywords)}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Candidates tab ───────────────────────────────────────────────────────────
-function CandidatesTab({ mapData, form }) {
-  const [candidates, setCandidates] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [sourced, setSourced] = useState(false);
-  const abortRef = useRef(null);
-
-  const allCompanies = [
-    ...(mapData.companies||[]).map(c=>({name:c.label,score:(c.confidence||0)+(c.poachability||0)})),
-    ...(mapData.adjacent ||[]).map(c=>({name:c.label,score:50})),
-    ...(mapData.wildcards||[]).map(c=>({name:c.label,score:40})),
-  ].sort((a,b)=>b.score-a.score);
-  const targetNames = allCompanies.map(c=>c.name);
-
-  function stop() { if(abortRef.current) abortRef.current.abort(); setLoading(false); }
-
-  async function source() {
-    if(abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
-    setLoading(true); setError(""); setCandidates([]);
-    try {
-      const res = await fetch("/api/source", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        signal: abortRef.current.signal,
-        body: JSON.stringify({companies:targetNames,role:form.role,skills:form.skills,seniority:form.seniority,location:form.location}),
-      });
-      const data = await res.json();
-      if(!res.ok){setError(data.error||"Source failed");setLoading(false);return;}
-      setCandidates(data.candidates||[]); setSourced(true);
-    } catch(e){if(e.name!=="AbortError")setError("Network error: "+e.message);}
-    setLoading(false);
-  }
-
-  function exportCSV() {
-    const rows=[["Name","Title","Company","LinkedIn","Email","Snippet"]];
-    candidates.forEach(c=>rows.push([c.name,c.currentTitle,c.currentCompany,c.linkedinUrl,c.email||"",c.snippet||""]));
-    const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
-    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-    a.download="Candidates_"+form.role.replace(/\s+/g,"_")+".csv"; a.click();
-  }
-
-  return (
-    <div>
-      <div className="flex items-center gap-2.5 mb-2">
-        <div className="w-2 h-2 rounded-full" style={{background:"hsl(340 82% 60%)"}}/>
-        <span className="text-xs font-semibold text-foreground tracking-widest uppercase">Live Candidates</span>
-        <div className="flex-1 h-px bg-border"/>
-        {sourced && <span className="text-xs text-muted-foreground">{candidates.length} found</span>}
-      </div>
-
-      <div className="mb-4 p-3 rounded-lg border border-border bg-secondary/50">
-        <div className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider mb-2">Searching across</div>
-        <div className="flex flex-wrap gap-1.5">
-          {targetNames.slice(0,8).map((name,i)=>(
-            <span key={i} style={{fontSize:"12px",padding:"3px 10px",borderRadius:"6px",fontWeight:500,background:"#eff2fe",color:"#4d64d8",border:"1px solid #d2d8f8",fontFamily:"Inter,sans-serif"}}>{name}</span>
-          ))}
-          {targetNames.length>8&&<span className="text-xs text-muted-foreground px-1">+{targetNames.length-8} more</span>}
-        </div>
-      </div>
-
-      <div className="mb-4 text-xs text-muted-foreground">~{Math.min(targetNames.length,8)*2} Serper credits per search</div>
-
-      {error && <div className="mb-3 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">{error}</div>}
-
-      {!sourced && !loading && (
-        <button type="button" onClick={source}
-          style={{width:"100%",padding:"11px 16px",borderRadius:"8px",fontSize:"14px",fontWeight:600,color:"#fff",border:"none",cursor:"pointer",background:"#f04e7c",fontFamily:"Inter,sans-serif",boxShadow:"0 4px 12px rgba(240,78,124,0.35)"}}>
-          Source Candidates →
-        </button>
-      )}
-
-      {loading && (
-        <div className="flex flex-col items-center gap-4 py-12">
-          <div className="sc-spinner" style={{width:"24px",height:"24px",border:"2px solid #4d64d8",borderTopColor:"transparent",borderRadius:"50%"}}/>
-          <div className="text-center">
-            <div className="text-sm font-medium text-foreground">Scanning LinkedIn</div>
-            <div className="text-xs text-muted-foreground mt-1">{Math.min(targetNames.length,8)*2} queries in flight</div>
-          </div>
-          <button type="button" onClick={stop} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/30 text-destructive text-xs font-semibold hover:bg-destructive/10 transition-all">
-            <div className="w-1.5 h-1.5 rounded-sm bg-destructive"/>Stop
-          </button>
-        </div>
-      )}
-
-      {sourced && !loading && (
-        <>
-          {candidates.length===0 ? (
-            <div className="text-center py-10">
-              <div className="text-muted-foreground/30 text-3xl mb-3">∅</div>
-              <div className="text-sm font-medium text-foreground">No profiles found</div>
-              <div className="text-xs text-muted-foreground mt-1">Try broader skills or a different role title</div>
-              <button type="button" onClick={source} className="mt-4 px-5 py-2 rounded-lg text-xs font-semibold border border-border text-muted-foreground hover:border-primary hover:text-primary transition-all">Retry</button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-xs text-muted-foreground">{candidates.length} profiles · ranked by relevance</div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={exportCSV} className="px-3 py-1.5 rounded-md text-xs font-semibold bg-accent/10 border border-accent/20 text-accent hover:bg-accent/20 transition-all">CSV</button>
-                  <button type="button" onClick={source} className="px-3 py-1.5 rounded-md text-xs font-semibold border border-border text-muted-foreground hover:border-primary hover:text-primary transition-all">Re-run</button>
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:"12px"}}>
-                {candidates.map((c,i)=><CandidateCard key={c.linkedinUrl} candidate={c} index={i} keywords={[form.role,...(form.skills||[]),form.seniority].filter(Boolean)}/>)}
-              </div>
-              <div className="mt-4 text-xs text-muted-foreground text-center">X-ray sourced · always verify before outreach</div>
-            </>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-
 // ─── X-Ray Builder ────────────────────────────────────────────────────────────
 function XRayTab({ mapData, form }) {
   const [copied, setCopied]   = useState(null);
@@ -655,7 +436,6 @@ const TABS = [
   { id:"adjacent",  label:"Adjacent",   dot:"#9b6ef5", count:d=>d.adjacent?.length  },
   { id:"wildcards", label:"Wildcards",  dot:"#f6720d", count:d=>d.wildcards?.length  },
   { id:"titles",    label:"Titles",     dot:"#1da882", count:d=>d.titles?.length     },
-  { id:"candidates",label:"Candidates", dot:"#f04e7c", isNew:true },
   { id:"xray",      label:"X-Ray",      dot:"#0891b2", isNew:true },
 ];
 
@@ -709,9 +489,7 @@ function ResultTabs({ mapData, form }) {
           </button>
         );})}
       </div>
-      {active==="candidates"
-        ? <CandidatesTab mapData={mapData} form={form}/>
-        : active==="xray"
+      {active==="xray"
         ? <XRayTab mapData={mapData} form={form}/>
         : <Section cat={active} nodes={nodes[active]}/>
       }
@@ -1139,10 +917,6 @@ export default function TalentMap() {
               <span style={{fontSize:"11px",color:"#8892b0"}}>{s.label}</span>
             </div>
           ))}
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:"hsl(340 82% 60%)"}}/>
-            <span style={{fontSize:"11px",color:"#8892b0"}}>Candidates</span>
-          </div>
         </div>
       </ResizableSidebar>
 
