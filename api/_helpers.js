@@ -87,6 +87,112 @@ export async function callLLM(prompt, maxTokens = 8192, systemPrompt = null) {
   throw new Error("No LLM API key configured.");
 }
 
+// ─── Crustdata — real company + people data (used for market mapping & sourcing) ─
+// NOTE: field names below follow Crustdata's publicly documented screener API
+// (Authorization: Token <key>, /screener/company, /screener/person/search) as of
+// this writing. Verify against your live account/Postman collection if Crustdata
+// changes their schema — every call here is defensive (optional chaining, try/catch,
+// null on any mismatch) so a schema drift degrades gracefully instead of breaking
+// the app; callers should treat a null return as "no enrichment available."
+const CRUSTDATA_BASE = "https://api.crustdata.com";
+
+function crustdataHeaders() {
+  const key = process.env.CRUSTDATA_API_KEY;
+  if (!key) return null;
+  return { "Content-Type": "application/json", "Authorization": `Token ${key}` };
+}
+
+export function hasCrustdata() {
+  return !!process.env.CRUSTDATA_API_KEY;
+}
+
+// Real headcount-growth / funding signals for one company — used to back
+// poachability with actual data instead of an AI guess (layoffs, hiring freeze,
+// funding stress).
+export async function crustdataEnrichCompany(nameOrDomain) {
+  const headers = crustdataHeaders();
+  if (!headers || !nameOrDomain) return null;
+  try {
+    const isDomain = /\.[a-z]{2,}$/i.test(nameOrDomain.trim());
+    const qs = isDomain
+      ? `company_domain=${encodeURIComponent(nameOrDomain.trim())}`
+      : `company_name=${encodeURIComponent(nameOrDomain.trim())}`;
+    const res = await fetch(`${CRUSTDATA_BASE}/screener/company?${qs}`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const row = Array.isArray(data) ? data[0] : (data?.results?.[0] || data?.companies?.[0] || null);
+    if (!row) return null;
+
+    const growth3m = row.linkedin_headcount_growth_percentage_3_months ?? row.headcount_growth_3m ?? null;
+    const growth1y = row.linkedin_headcount_growth_percentage_1_year ?? row.headcount_growth_1y ?? null;
+    const headcount = row.employee_count ?? row.linkedin_headcount ?? row.headcount ?? null;
+    const funding = row.latest_funding_round_type ?? row.last_funding_round ?? null;
+    const fundingDate = row.latest_funding_round_date ?? row.last_funding_date ?? null;
+
+    const signals = [];
+    if (typeof growth3m === "number" && growth3m <= -5) signals.push(`[Confirmed] Headcount down ${Math.abs(growth3m)}% over 3 months (Crustdata)`);
+    if (typeof growth1y === "number" && growth1y <= -10) signals.push(`[Confirmed] Headcount down ${Math.abs(growth1y)}% over 12 months (Crustdata)`);
+    if (typeof growth3m === "number" && growth3m >= 0 && growth3m < 2) signals.push(`[Signal] Hiring has stalled — near-flat headcount growth (Crustdata)`);
+    if (typeof growth1y === "number" && growth1y >= 15) signals.push(`[Signal] Headcount up ${growth1y}% over 12 months — fast growth, but also fresh promo/comp pressure (Crustdata)`);
+
+    return { company: nameOrDomain, headcount, growth3m, growth1y, funding, fundingDate, signals, source: "crustdata" };
+  } catch {
+    return null;
+  }
+}
+
+// Real candidate search by title/company/region — merged alongside the Serper
+// LinkedIn X-ray results in the Sourcing tab.
+export async function crustdataPeopleSearch({ title, companies, location, limit = 20 }) {
+  const headers = crustdataHeaders();
+  if (!headers) return null;
+  try {
+    const filters = [
+      title ? { filter_type: "CURRENT_TITLE", type: "in", value: [title] } : null,
+      companies?.length ? { filter_type: "CURRENT_COMPANY", type: "in", value: companies } : null,
+      location ? { filter_type: "REGION", type: "in", value: [location] } : null,
+    ].filter(Boolean);
+    if (!filters.length) return null;
+
+    const res = await fetch(`${CRUSTDATA_BASE}/screener/person/search`, {
+      method: "POST", headers, body: JSON.stringify({ filters, page: 1 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rows = data?.profiles || data?.results || (Array.isArray(data) ? data : []);
+    return rows.slice(0, limit).map(p => ({
+      name: p.name || [p.first_name, p.last_name].filter(Boolean).join(" "),
+      currentTitle: p.current_title || p.title || "",
+      currentCompany: p.current_employer || p.company || "",
+      linkedinUrl: p.linkedin_profile_url || p.linkedin_url || "",
+      location: p.location || p.region || "",
+      source: "crustdata",
+    })).filter(p => p.name && p.linkedinUrl);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Clay — push rows into the user's Clay table for waterfall enrichment ────
+// Clay's public integration surface is webhook-based (inbound webhook per table),
+// not a synchronous search API, so this fires rows at the configured webhook and
+// lets Clay's own workbook do the enrichment — results land in Clay, not back here.
+export async function pushToClay(webhookUrl, rows) {
+  if (!webhookUrl) throw new Error("No Clay webhook URL configured.");
+  if (!rows?.length) throw new Error("No rows to send.");
+  const results = await Promise.allSettled(
+    rows.map(row =>
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(row),
+      })
+    )
+  );
+  const delivered = results.filter(r => r.status === "fulfilled" && r.value.ok).length;
+  return { sent: rows.length, delivered };
+}
+
 // Robust JSON repair — string-aware bracket counting, two-strategy approach.
 // Strategy 1: close unclosed brackets directly.
 // Strategy 2: cut to last safe comma + close.

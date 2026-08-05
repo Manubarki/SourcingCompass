@@ -1,3 +1,5 @@
+import { crustdataPeopleSearch, hasCrustdata } from "./_helpers.js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -9,7 +11,7 @@ export default async function handler(req, res) {
   if (!companies?.length || !role) return res.status(400).json({ error: "companies and role are required" });
 
   const SERPER_KEY = process.env.SERPER_API_KEY;
-  if (!SERPER_KEY) return res.status(500).json({ error: "SERPER_API_KEY not configured" });
+  if (!SERPER_KEY && !hasCrustdata()) return res.status(500).json({ error: "Neither SERPER_API_KEY nor CRUSTDATA_API_KEY is configured" });
 
   const targets = companies.slice(0, 8);
   const normTargets = targets.map(t => t.toLowerCase().replace(/[^a-z0-9]/g, ""));
@@ -124,23 +126,34 @@ export default async function handler(req, res) {
   });
 
   let rawResults = [];
-  try {
-    const responses = await Promise.all(
-      uniqueQueries.map(({ query }) =>
-        fetch("https://google.serper.dev/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-API-KEY": SERPER_KEY },
-          body: JSON.stringify({ q: query, num: 10 }),
-        }).then(r => r.json()).catch(() => ({ organic: [] }))
-      )
-    );
+  if (SERPER_KEY) {
+    try {
+      const responses = await Promise.all(
+        uniqueQueries.map(({ query }) =>
+          fetch("https://google.serper.dev/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-API-KEY": SERPER_KEY },
+            body: JSON.stringify({ q: query, num: 10 }),
+          }).then(r => r.json()).catch(() => ({ organic: [] }))
+        )
+      );
 
-    rawResults = responses.flatMap((r, i) => {
-      const meta = uniqueQueries[i];
-      return (r.organic || []).map(item => ({ ...item, _queryCompany: meta.company, _queryType: meta.type }));
-    });
-  } catch (err) {
-    return res.status(500).json({ error: "Serper search failed: " + err.message });
+      rawResults = responses.flatMap((r, i) => {
+        const meta = uniqueQueries[i];
+        return (r.organic || []).map(item => ({ ...item, _queryCompany: meta.company, _queryType: meta.type }));
+      });
+    } catch (err) {
+      if (!hasCrustdata()) return res.status(500).json({ error: "Serper search failed: " + err.message });
+    }
+  }
+
+  // Crustdata people search — real profile data merged alongside the X-ray results.
+  let crustdataCandidates = [];
+  if (hasCrustdata()) {
+    const crustResults = await Promise.all(
+      targets.map(company => crustdataPeopleSearch({ title: roleStem, companies: [company], location }))
+    );
+    crustdataCandidates = crustResults.flat().filter(Boolean);
   }
 
   // ── Parse candidate ──
@@ -167,7 +180,7 @@ export default async function handler(req, res) {
     const emailMatch = snippet.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
     const email = emailMatch ? emailMatch[0] : null;
 
-    return { name, currentTitle, currentCompany, linkedinUrl: url, email, snippet, _queryType: result._queryType };
+    return { name, currentTitle, currentCompany, linkedinUrl: url, email, snippet, source: "serper", _queryType: result._queryType };
   }
 
   // ── Seniority validation ──
@@ -256,7 +269,7 @@ export default async function handler(req, res) {
 
   // ── Assemble results ──
   const seen = new Set();
-  const candidates = rawResults
+  const serperCandidates = rawResults
     .map(parseCandidate)
     .filter(Boolean)
     .filter(c => {
@@ -272,10 +285,18 @@ export default async function handler(req, res) {
       if (!hasRequiredSkill(c)) return false;
       return true;
     })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 30)
     .map(({ _queryType, ...c }) => c);
 
+  const dedupedCrustdata = crustdataCandidates.filter(c => {
+    if (seen.has(c.linkedinUrl)) return false;
+    seen.add(c.linkedinUrl);
+    return true;
+  }).map(c => ({ ...c, score: scoreCandidate(c) + 2 })); // real profile data — nudge above equivalent Serper guesses
+
+  const candidates = [...serperCandidates, ...dedupedCrustdata]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 30);
+
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.json({ candidates });
+  res.json({ candidates, crustdataUsed: hasCrustdata(), serperUsed: !!SERPER_KEY });
 }
