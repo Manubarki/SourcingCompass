@@ -45,37 +45,44 @@ function repairJSON(raw) {
   return raw;
 }
 
-const DOC_CONTEXT = `SourcingCompass is a talent intelligence tool that answers "where do people like this actually work?" — generating an AI-powered map of the talent landscape for any role in under 30 seconds.
+const DOC_CONTEXT = `SourcingCompass is a talent intelligence tool that answers "where do people like this actually work?" — generating an AI-powered map of the talent landscape for any role in under 30 seconds. It now covers the full workflow: Intake Agent → Market Mapping → Sourcing → Market Report.
 
-HOW TO USE:
-Fill in Role Title, Hiring Company (excluded from results), Location, Seniority, Must-Have Skills (comma or Enter to add tags), Industries, Exclusions. Optionally paste a JD and click "Parse JD" to auto-fill fields. Click Generate Map.
+MODE TOGGLE (top of sidebar):
+- Quick Search — the original manual form (Role, Company, Location, Seniority, Skills, Industries, Exclusions).
+- Intake Agent — a chat-driven agent that interviews the hiring manager one question at a time (team/why open, must-haves, nice-to-haves, dealbreakers, comp range, success metrics, culture, interview process), then generates a structured ICP + full job description. Finalizing auto-fills the Quick Search form.
 
-FOUR RESULT TABS:
-1. Target Companies (blue) — Real companies employing people with your exact skills. Each card shows: Relevance (skill match 0-100), Talent Density (how concentrated talent is there), Poachability (likelihood to move). Stage badge = company lifecycle. Hover card = "Why Relevant" tooltip.
-2. Adjacent Talent Pools (purple) — Companies with transferable skills, not direct competitors. Skill overlap matters, not product similarity. Candidates your competitors aren't sourcing.
-3. Wildcard Bets (orange) — Surprising non-obvious tech companies with strong skill overlap. E.g. gaming company for real-time data engineers. Only tech/software companies, never banks or manufacturers.
-4. Target Titles (green) — Exact job titles as they appear across companies. Use directly in LinkedIn search: title + target company = pre-qualified pool in 2 minutes.
+RESULT TABS:
+0. ICP & JD (pink, only after running Intake Agent) — the synthesized Ideal Candidate Profile fields plus the full generated job description, with copy/download actions.
+1. Target Companies (blue) — Real companies employing people with your exact skills. Each card shows: Relevance (skill match 0-100), Talent Density, Poachability, Poachability Category (Layoffs/Restructuring/Acquisition/Funding Stress/Hiring Freeze/Stock Decline/Growth Stall), Salary Range (estimated comp band), Level Equivalent (that company's internal level for the searched seniority), Stage badge, "Why Relevant" tooltip on hover. A "⟳ Enrich with Crustdata" button overlays real headcount-growth/funding signals when CRUSTDATA_API_KEY is configured — enriched cards get a green "✓ Verified" badge.
+2. Adjacent Talent Pools (purple) — Companies with transferable skills, not direct competitors.
+3. Wildcard Bets (orange) — Surprising non-obvious tech companies with strong skill overlap.
+4. Target Titles (green) — Exact job titles as they appear across companies.
+5. Sourcing (teal, "NEW") — X-ray boolean search strings, PLUS a "Find Candidates" live search that pulls real LinkedIn profiles (Serper) merged with real Crustdata people-search results, PLUS a "Push to Clay" button that sends candidate rows to a Clay table webhook for further enrichment.
 
 SCORES EXPLAINED:
 - Relevance: 90+ = very close match. 60-70 = good overlap. Below 60 = stretch.
 - High relevance ≠ best target. A 70% relevance + 85% poachability company often beats 95% relevance + 30% poachability.
-- Talent Density: how concentrated relevant talent is. A 50-person AI startup can have higher density than a huge enterprise.
-- Poachability signals: [Confirmed] = specific reported fact (layoffs, markdowns). [Signal] = inferred pattern (slow promotions, equity underwater). Use to tailor outreach angle, not to quote directly.
+- Talent Density: how concentrated relevant talent is.
+- Poachability signals: [Confirmed] = specific reported fact. [Signal] = inferred pattern. Crustdata-enriched signals are real headcount/funding data, not AI guesses.
+- Salary Range / Level Equivalent are AI-estimated (levels.fyi-style) unless Crustdata enrichment is shown.
 
-JD PARSER:
-Paste any job description → auto-extracts role title, seniority, key skills. Edit tags manually if needed (× to remove, type + Enter to add).
+MARKET REPORT (artifact):
+"Create Report" button next to Export CSV opens a printable/shareable one-pager — ICP summary, full company table with salary/level/poachability, adjacent pools, wildcards, target titles. Use "Print / Save as PDF".
+
+JD PARSER (Quick Search only):
+Paste any job description → auto-extracts role title, seniority, key skills.
 
 CSV EXPORT:
-Downloads all four sections as a spreadsheet — opens in Excel or Google Sheets.
+Downloads all sections including salary range, level, and poachability category as a spreadsheet.
 
 COMPANY MEMORY:
-Grounded in 2000+ verified ML/AI/Data ecosystem companies from the MAD Firstmark landscape. Significantly reduces hallucinations vs pure AI generation.
+Grounded in 2000+ verified ML/AI/Data ecosystem companies from the MAD Firstmark landscape.
 
 TIPS:
-- Add specific skills (e.g. "Apache Iceberg, dbt, Spark") for much better results
-- Use Exclusions for companies already sourced or off-limits
-- Try different seniority levels — Staff vs Senior return different company mixes
+- Run the Intake Agent first if you don't already have a tight brief — it produces a sharper map than guessing at fields
+- Add specific skills for much better results
 - High poachability + moderate relevance = often the best sourcing target
+- Enrich with Crustdata before writing outreach — real signals beat AI guesses
 
 BUILT BY: Manu Barki, Talent Partner at Atlan. Stack: React + Vite + Express on Railway, Claude Sonnet via LiteLLM proxy.`;
 
@@ -167,11 +174,33 @@ function CompanyCard({ node }) {
       onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"8px",marginBottom:"4px"}}>
         <div style={{fontSize:"15px",fontWeight:700,color,fontFamily:"Inter,sans-serif",letterSpacing:"-0.01em"}}>{node.label}</div>
-        {node.stage && (
-          <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"999px",background:"#f3f4f6",color:"#6b7280",border:"1px solid #e5e7eb",fontWeight:500,whiteSpace:"nowrap",flexShrink:0,fontFamily:"Inter,sans-serif"}}>{node.stage}</span>
-        )}
+        <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
+          {node.crustdataEnriched && (
+            <span title="Verified via Crustdata" style={{fontSize:"10px",padding:"2px 7px",borderRadius:"999px",background:"#ecfdf5",color:"#059669",border:"1px solid #a7f3d0",fontWeight:600,whiteSpace:"nowrap",fontFamily:"Inter,sans-serif"}}>✓ Verified</span>
+          )}
+          {node.stage && (
+            <span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"999px",background:"#f3f4f6",color:"#6b7280",border:"1px solid #e5e7eb",fontWeight:500,whiteSpace:"nowrap",fontFamily:"Inter,sans-serif"}}>{node.stage}</span>
+          )}
+        </div>
       </div>
       {node.sub && <div style={{fontSize:"13px",color:"#6b7280",marginBottom:"10px",fontFamily:"Inter,sans-serif"}}>{node.sub}</div>}
+      {(node.salaryRange || node.levelEquivalent) && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"10px"}}>
+          {node.salaryRange && (
+            <span style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#f0fdf4",color:"#16a34a",border:"1px solid #bbf7d0",fontFamily:"Inter,sans-serif"}}>💰 {node.salaryRange}</span>
+          )}
+          {node.levelEquivalent && (
+            <span style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",fontFamily:"Inter,sans-serif"}}>{node.levelEquivalent}</span>
+          )}
+        </div>
+      )}
+      {node.poachabilityCategory?.length > 0 && (
+        <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"10px"}}>
+          {node.poachabilityCategory.map(cat=>(
+            <span key={cat} style={{fontSize:"10px",padding:"2px 8px",borderRadius:"5px",fontWeight:600,background:"#fff7ed",color:"#c2410c",border:"1px solid #fed7aa",fontFamily:"Inter,sans-serif"}}>{cat}</span>
+          ))}
+        </div>
+      )}
       {node.tags && (
         <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"10px"}}>
           {node.tags.map(t=>(
@@ -266,7 +295,7 @@ function SimpleCard({ node, cat }) {
 }
 
 // ─── Section ──────────────────────────────────────────────────────────────────
-function Section({ cat, nodes }) {
+function Section({ cat, nodes, extra }) {
   const s = CAT[cat];
   return (
     <div>
@@ -275,6 +304,7 @@ function Section({ cat, nodes }) {
         <span className="text-xs font-semibold text-foreground tracking-widest uppercase">{s.label}</span>
         <div className="flex-1 h-px bg-border"/>
         <span className="text-xs text-muted-foreground">{nodes.length} results</span>
+        {extra}
       </div>
       <p className="text-xs text-muted-foreground mb-4 ml-4">{s.desc}</p>
       <div className="grid grid-cols-3 gap-3" style={{overflow:"visible"}}>
@@ -287,8 +317,143 @@ function Section({ cat, nodes }) {
   );
 }
 
-// ─── X-Ray Builder ────────────────────────────────────────────────────────────
-function XRayTab({ mapData, form }) {
+// ─── Live candidate search + Push to Clay ────────────────────────────────────
+function CandidateSearch({ mapData, form }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState(null);
+  const [candidates, setCandidates] = useState(null);
+  const [meta, setMeta] = useState(null);
+  const [clayStatus, setClayStatus] = useState(null);
+  const [clayLoading, setClayLoading] = useState(false);
+  const [clayUrl, setClayUrl] = useState("");
+
+  async function findCandidates() {
+    setLoading(true); setError(null); setCandidates(null);
+    try {
+      const r = await fetch("/api/source", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companies: (mapData.companies||[]).map(c=>c.label),
+          role: form.role, skills: form.skills||[], seniority: form.seniority, location: form.location,
+        }),
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setCandidates(data.candidates||[]);
+      setMeta({ crustdataUsed: data.crustdataUsed, serperUsed: data.serperUsed });
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  async function pushToClay() {
+    if (!candidates?.length) return;
+    setClayLoading(true); setClayStatus(null);
+    try {
+      const rows = candidates.map(c => ({
+        name: c.name, title: c.currentTitle, company: c.currentCompany,
+        linkedin_url: c.linkedinUrl, email: c.email || "", role_sourced_for: form.role,
+      }));
+      const r = await fetch("/api/clay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows, ...(clayUrl.trim() ? { webhookUrl: clayUrl.trim() } : {}) }),
+      });
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      setClayStatus({ ok: true, message: `Sent ${data.delivered}/${data.sent} rows to Clay for enrichment.` });
+    } catch(e) { setClayStatus({ ok: false, message: e.message }); }
+    setClayLoading(false);
+  }
+
+  return (
+    <div style={{marginTop:"24px",paddingTop:"20px",borderTop:"1px solid #f3f4f6"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+        <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"#4d64d8",boxShadow:"0 0 0 3px rgba(77,100,216,0.15)"}}/>
+        <span style={{fontSize:"11px",fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif"}}>Live Candidates</span>
+        <div style={{flex:1,height:"1px",background:"#f3f4f6"}}/>
+      </div>
+      <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"16px",fontFamily:"Inter,sans-serif"}}>
+        Searches real LinkedIn profiles at your target companies via Google X-ray (Serper), merged with Crustdata people search when configured.
+      </p>
+
+      {!candidates && !loading && (
+        <button type="button" onClick={findCandidates}
+          style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 20px",borderRadius:"8px",
+            background:"#4d64d8",color:"#fff",border:"none",cursor:"pointer",fontSize:"13px",
+            fontWeight:600,fontFamily:"Inter,sans-serif",boxShadow:"0 2px 8px rgba(77,100,216,0.3)"}}>
+          Find Candidates
+        </button>
+      )}
+
+      {loading && (
+        <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"16px",background:"#f5f7ff",borderRadius:"10px",border:"1px solid #d2d8f8"}}>
+          <div style={{width:"16px",height:"16px",border:"2px solid #4d64d8",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite",flexShrink:0}}/>
+          <span style={{fontSize:"13px",color:"#4d64d8",fontFamily:"Inter,sans-serif",fontWeight:500}}>Searching LinkedIn + Crustdata for matching candidates…</span>
+        </div>
+      )}
+
+      {error && (
+        <div style={{padding:"12px 14px",background:"#fef2f2",borderRadius:"8px",border:"1px solid #fecaca"}}>
+          <span style={{fontSize:"12px",color:"#dc2626",fontFamily:"Inter,sans-serif"}}>{error}</span>
+        </div>
+      )}
+
+      {candidates && (
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px",flexWrap:"wrap",gap:"8px"}}>
+            <span style={{fontSize:"12px",color:"#6b7280",fontFamily:"Inter,sans-serif"}}>
+              {candidates.length} candidates found
+              {meta && ` · ${[meta.serperUsed&&"Serper",meta.crustdataUsed&&"Crustdata"].filter(Boolean).join(" + ")}`}
+            </span>
+            <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+              <input value={clayUrl} onChange={e=>setClayUrl(e.target.value)} placeholder="Clay webhook URL (optional, uses env default)"
+                style={{fontSize:"11px",padding:"6px 10px",borderRadius:"6px",border:"1px solid #e5e7eb",width:"260px",fontFamily:"Inter,sans-serif"}}/>
+              <button type="button" onClick={pushToClay} disabled={clayLoading || !candidates.length}
+                style={{padding:"6px 12px",borderRadius:"6px",fontSize:"11px",fontWeight:600,border:"1px solid #4d64d8",background:"#eff2fe",color:"#4d64d8",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap",opacity:clayLoading?0.6:1}}>
+                {clayLoading ? "Sending…" : "Push to Clay"}
+              </button>
+              <button type="button" onClick={findCandidates}
+                style={{padding:"6px 12px",borderRadius:"6px",fontSize:"11px",fontWeight:600,border:"1px solid #e5e7eb",background:"#fff",color:"#6b7280",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>
+                ↻ Refresh
+              </button>
+            </div>
+          </div>
+          {clayStatus && (
+            <div style={{marginBottom:"12px",padding:"8px 12px",borderRadius:"7px",fontSize:"12px",fontFamily:"Inter,sans-serif",
+              background: clayStatus.ok ? "#f0fdf4" : "#fef2f2", color: clayStatus.ok ? "#16a34a" : "#dc2626",
+              border: `1px solid ${clayStatus.ok ? "#bbf7d0" : "#fecaca"}`}}>
+              {clayStatus.message}
+            </div>
+          )}
+          {candidates.length === 0 && (
+            <div style={{fontSize:"12px",color:"#9ca3af",fontFamily:"Inter,sans-serif"}}>No candidates matched your filters — try widening seniority or removing a must-have skill.</div>
+          )}
+          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+            {candidates.map((c,i)=>(
+              <a key={i} href={c.linkedinUrl} target="_blank" rel="noreferrer"
+                style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"8px",padding:"10px 12px",textDecoration:"none"}}>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:"13px",fontWeight:600,color:"#111827",fontFamily:"Inter,sans-serif"}}>{c.name}</div>
+                  <div style={{fontSize:"12px",color:"#6b7280",fontFamily:"Inter,sans-serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.currentTitle}{c.currentCompany?` · ${c.currentCompany}`:""}</div>
+                </div>
+                <span style={{fontSize:"10px",fontWeight:700,padding:"2px 8px",borderRadius:"999px",flexShrink:0,
+                  background: c.source==="crustdata" ? "#ecfdf5" : "#eff6ff",
+                  color: c.source==="crustdata" ? "#059669" : "#2563eb",
+                  border: `1px solid ${c.source==="crustdata" ? "#a7f3d0" : "#bfdbfe"}`}}>
+                  {c.source==="crustdata" ? "Crustdata" : "LinkedIn"}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sourcing tab: X-Ray Builder + live candidates ───────────────────────────
+function SourcingTab({ mapData, form }) {
   const [copied, setCopied]   = useState(null);
   const [loading, setLoading] = useState(false);
   const [result,  setResult]  = useState(null);
@@ -426,26 +591,30 @@ function XRayTab({ mapData, form }) {
           </button>
         </div>
       )}
+
+      <CandidateSearch mapData={mapData} form={form}/>
     </div>
   );
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
+  { id:"icp",       label:"ICP & JD",   dot:"#f34d77" },
   { id:"companies", label:"Companies",  dot:"#4d64d8", count:d=>d.companies?.length },
   { id:"adjacent",  label:"Adjacent",   dot:"#9b6ef5", count:d=>d.adjacent?.length  },
   { id:"wildcards", label:"Wildcards",  dot:"#f6720d", count:d=>d.wildcards?.length  },
   { id:"titles",    label:"Titles",     dot:"#1da882", count:d=>d.titles?.length     },
-  { id:"xray",      label:"X-Ray",      dot:"#0891b2", isNew:true },
+  { id:"sourcing",  label:"Sourcing",   dot:"#0891b2", isNew:true },
 ];
 
-function ResultTabs({ mapData, form }) {
-  const [active, setActive] = useState("companies");
+function ResultTabs({ mapData, form, icp, jobDescription, onEnrich, enriching }) {
+  const [active, setActive] = useState(icp ? "icp" : "companies");
   const nodes = {companies:mapData.companies,adjacent:mapData.adjacent,wildcards:mapData.wildcards,titles:mapData.titles};
+  const visibleTabs = TABS.filter(t => t.id!=="icp" || icp);
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"24px",flexWrap:"wrap"}}>
-        {TABS.map(t=>{
+        {visibleTabs.map(t=>{
           const isActive = active===t.id;
           return (
           <button key={t.id} type="button" onClick={()=>setActive(t.id)}
@@ -489,9 +658,15 @@ function ResultTabs({ mapData, form }) {
           </button>
         );})}
       </div>
-      {active==="xray"
-        ? <XRayTab mapData={mapData} form={form}/>
-        : <Section cat={active} nodes={nodes[active]}/>
+      {active==="icp" ? <ICPPanel icp={icp} jobDescription={jobDescription}/>
+        : active==="sourcing" ? <SourcingTab mapData={mapData} form={form}/>
+        : <Section cat={active} nodes={nodes[active]}
+            extra={active==="companies" ? (
+              <button type="button" onClick={onEnrich} disabled={enriching}
+                style={{fontSize:"11px",fontWeight:600,padding:"4px 10px",borderRadius:"999px",border:"1px solid #a7f3d0",background:"#ecfdf5",color:"#059669",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap",opacity:enriching?0.6:1}}>
+                {enriching ? "Enriching…" : "⟳ Enrich with Crustdata"}
+              </button>
+            ) : null}/>
       }
     </div>
   );
@@ -500,7 +675,7 @@ function ResultTabs({ mapData, form }) {
 // ─── Loading screen ───────────────────────────────────────────────────────────
 function LoadingScreen() {
   const [step,setStep]=useState(0);
-  const steps=TABS.filter(t=>t.id!=="candidates");
+  const steps=TABS.filter(t=>t.id!=="candidates" && t.id!=="icp");
   useEffect(()=>{const iv=setInterval(()=>setStep(s=>(s+1)%steps.length),900);return()=>clearInterval(iv);},[]);
   return (
     <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"28px"}}>
@@ -677,12 +852,287 @@ Use this data to give specific, contextual answers about the current map.`;
   );
 }
 
+// ─── ICP & JD panel (results tab) ────────────────────────────────────────────
+function ChipList({ items, tone }) {
+  const tones = {
+    green:  {bg:"#f0fdf4",color:"#16a34a",border:"#bbf7d0"},
+    blue:   {bg:"#eff6ff",color:"#2563eb",border:"#bfdbfe"},
+    red:    {bg:"#fef2f2",color:"#dc2626",border:"#fecaca"},
+  };
+  const c = tones[tone]||tones.blue;
+  if (!items?.length) return <span style={{fontSize:"12px",color:"#9ca3af",fontFamily:"Inter,sans-serif"}}>None captured</span>;
+  return (
+    <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+      {items.map((t,i)=>(
+        <span key={i} style={{fontSize:"12px",padding:"4px 10px",borderRadius:"6px",fontWeight:500,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontFamily:"Inter,sans-serif"}}>{t}</span>
+      ))}
+    </div>
+  );
+}
+
+function ICPField({ label, children }) {
+  return (
+    <div style={{marginBottom:"18px"}}>
+      <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"8px",fontFamily:"Inter,sans-serif"}}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function ICPPanel({ icp, jobDescription }) {
+  const [copied, setCopied] = useState(false);
+  if (!icp) return <div style={{fontSize:"13px",color:"#9ca3af",fontFamily:"Inter,sans-serif"}}>No ICP yet — run the Intake Agent from the sidebar to generate one.</div>;
+
+  function copyJD() {
+    navigator.clipboard.writeText(jobDescription||"");
+    setCopied(true); setTimeout(()=>setCopied(false), 2000);
+  }
+  function downloadJD() {
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([jobDescription||""],{type:"text/markdown"}));
+    a.download=(icp.role||"job_description").replace(/\s+/g,"_")+".md"; a.click();
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"32px"}}>
+      <div>
+        {icp.summary && (
+          <div style={{marginBottom:"20px",padding:"14px 16px",background:"#fff7f9",borderRadius:"10px",border:"1px solid #fbcfe1",borderLeft:"3px solid #f34d77"}}>
+            <p style={{fontSize:"13px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>{icp.summary}</p>
+          </div>
+        )}
+        <ICPField label="Team & Why Open"><p style={{fontSize:"13px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>{icp.teamContext||"Not captured"}</p></ICPField>
+        <ICPField label="Must-Haves"><ChipList items={icp.mustHaves} tone="green"/></ICPField>
+        <ICPField label="Nice-to-Haves"><ChipList items={icp.niceToHaves} tone="blue"/></ICPField>
+        <ICPField label="Dealbreakers"><ChipList items={icp.dealbreakers} tone="red"/></ICPField>
+        <ICPField label="Comp Range"><p style={{fontSize:"13px",color:"#374151",fontFamily:"Inter,sans-serif",margin:0,fontWeight:600}}>{icp.compRange||"Not captured"}</p></ICPField>
+        <ICPField label="Success Metrics (6-12mo)"><p style={{fontSize:"13px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>{icp.successMetrics||"Not captured"}</p></ICPField>
+        <ICPField label="Culture Notes"><p style={{fontSize:"13px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>{icp.cultureNotes||"Not captured"}</p></ICPField>
+        <ICPField label="Interview Process"><p style={{fontSize:"13px",color:"#374151",lineHeight:1.6,fontFamily:"Inter,sans-serif",margin:0}}>{icp.interviewProcess||"Not captured"}</p></ICPField>
+      </div>
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px"}}>
+          <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"Inter,sans-serif"}}>Job Description</div>
+          <div style={{display:"flex",gap:"6px"}}>
+            <button type="button" onClick={copyJD} style={{fontSize:"11px",fontWeight:600,padding:"5px 10px",borderRadius:"6px",border:"1px solid #e5e7eb",background: copied?"#f0fdf9":"#fff",color: copied?"#1da882":"#6b7280",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>{copied?"✓ Copied":"Copy"}</button>
+            <button type="button" onClick={downloadJD} style={{fontSize:"11px",fontWeight:600,padding:"5px 10px",borderRadius:"6px",border:"1px solid #4d64d8",background:"#eff2fe",color:"#4d64d8",cursor:"pointer",fontFamily:"Inter,sans-serif"}}>Download .md</button>
+          </div>
+        </div>
+        <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"18px",fontSize:"13px",color:"#374151",lineHeight:1.7,fontFamily:"Inter,sans-serif",whiteSpace:"pre-wrap",maxHeight:"640px",overflowY:"auto"}}>
+          {jobDescription || "No job description generated yet."}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ICP landing — shown before a market map has been generated ─────────────
+function ICPLanding({ icp, jobDescription, onGenerateMap, loading }) {
+  return (
+    <div className="relative z-10 p-8" style={{maxWidth:"920px",margin:"0 auto"}}>
+      <div style={{marginBottom:"20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px"}}>
+        <div>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#f34d77",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif",marginBottom:"6px"}}>Intake complete</div>
+          <h1 style={{fontSize:"22px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif"}}>{icp.role || "Ideal Candidate Profile"}</h1>
+        </div>
+        <button type="button" onClick={onGenerateMap} disabled={loading}
+          style={{flexShrink:0,display:"flex",alignItems:"center",gap:"8px",padding:"11px 20px",borderRadius:"8px",fontSize:"14px",fontWeight:600,color:"white",border:"none",cursor:"pointer",background:"#4d64d8",boxShadow:"0 4px 12px rgba(77,100,216,0.4)",fontFamily:"Inter,sans-serif",opacity:loading?0.6:1}}>
+          {loading ? "Mapping…" : "Generate Market Map →"}
+        </button>
+      </div>
+      <ICPPanel icp={icp} jobDescription={jobDescription}/>
+    </div>
+  );
+}
+
+// ─── Intake Agent — conversational chat that builds the ICP ─────────────────
+function IntakeChat({ transcript, onSend, onFinalize, loading, ready, finalizing, error }) {
+  const [input, setInput] = useState("");
+  const bottomRef = useRef(null);
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [transcript, loading]);
+
+  function submit() {
+    const text = input.trim();
+    if (!text || loading || finalizing) return;
+    setInput("");
+    onSend(text);
+  }
+
+  return (
+    <div className="relative z-10" style={{maxWidth:"680px",margin:"0 auto",padding:"32px 24px",display:"flex",flexDirection:"column",height:"100%"}}>
+      <div style={{marginBottom:"16px"}}>
+        <div style={{fontSize:"11px",fontWeight:700,color:"#4d64d8",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif",marginBottom:"6px"}}>Intake Agent</div>
+        <h1 style={{fontSize:"20px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif"}}>Let's build your ICP</h1>
+        <p style={{fontSize:"13px",color:"#9ca3af",marginTop:"4px",fontFamily:"Inter,sans-serif"}}>Answer like you would on a real intake call — the agent asks one question at a time, then synthesizes an ICP and job description.</p>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:"12px",paddingBottom:"16px",minHeight:"320px"}}>
+        {transcript.map((m,i)=>(
+          <div key={i} style={{display:"flex",justifyContent: m.role==="user"?"flex-end":"flex-start"}}>
+            <div style={{maxWidth:"80%",borderRadius:"14px",padding:"10px 14px",fontSize:"13px",lineHeight:1.6,fontFamily:"Inter,sans-serif",
+              background: m.role==="user" ? "#4d64d8" : "#ffffff",
+              color: m.role==="user" ? "#ffffff" : "#374151",
+              border: m.role==="user" ? "none" : "1px solid #e5e7eb"}}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div style={{display:"flex",justifyContent:"flex-start"}}>
+            <div style={{background:"#ffffff",border:"1px solid #e5e7eb",borderRadius:"14px",padding:"10px 14px",display:"flex",gap:"4px",alignItems:"center"}}>
+              {[0,1,2].map(i=><div key={i} style={{width:"6px",height:"6px",borderRadius:"50%",background:"#4d64d8",animation:`bounce ${0.6+i*0.1}s ease-in-out infinite alternate`}}/>)}
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef}/>
+      </div>
+
+      {error && <div style={{fontSize:"12px",color:"#dc2626",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:"8px",padding:"8px 12px",marginBottom:"10px",fontFamily:"Inter,sans-serif"}}>{error}</div>}
+
+      {ready && (
+        <div style={{marginBottom:"10px",padding:"10px 14px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px"}}>
+          <span style={{fontSize:"12px",color:"#16a34a",fontFamily:"Inter,sans-serif",fontWeight:500}}>Enough to build a solid ICP — wrap up whenever you're ready.</span>
+          <button type="button" onClick={onFinalize} disabled={finalizing}
+            style={{flexShrink:0,padding:"7px 14px",borderRadius:"7px",fontSize:"12px",fontWeight:600,border:"none",background:"#16a34a",color:"#fff",cursor:"pointer",fontFamily:"Inter,sans-serif",opacity:finalizing?0.6:1}}>
+            {finalizing ? "Generating ICP…" : "Generate ICP & JD"}
+          </button>
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:"8px"}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()}
+          placeholder="Type your answer…" disabled={loading||finalizing}
+          style={{flex:1,padding:"11px 14px",borderRadius:"8px",border:"1px solid #e5e7eb",fontSize:"13px",fontFamily:"Inter,sans-serif",outline:"none"}}/>
+        <button type="button" onClick={submit} disabled={loading||finalizing||!input.trim()}
+          style={{padding:"11px 18px",borderRadius:"8px",background:"#4d64d8",color:"#fff",border:"none",cursor:"pointer",fontSize:"13px",fontWeight:600,fontFamily:"Inter,sans-serif",opacity:(loading||finalizing||!input.trim())?0.4:1}}>
+          Send
+        </button>
+      </div>
+      {!ready && (
+        <button type="button" onClick={onFinalize} disabled={finalizing || transcript.length<2}
+          style={{marginTop:"10px",alignSelf:"flex-start",fontSize:"11px",fontWeight:600,color:"#9ca3af",background:"none",border:"none",cursor:transcript.length<2?"default":"pointer",fontFamily:"Inter,sans-serif",textDecoration:transcript.length<2?"none":"underline"}}>
+          {finalizing ? "Generating ICP…" : "Wrap up early & generate ICP anyway"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Market Report — printable/shareable artifact ────────────────────────────
+function MarketReport({ mapData, form, icp, onClose }) {
+  const today = new Date().toLocaleDateString(undefined, { year:"numeric", month:"long", day:"numeric" });
+  const th = {textAlign:"left",fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",padding:"8px 10px",borderBottom:"1px solid #e5e7eb",fontFamily:"Inter,sans-serif"};
+  const td = {fontSize:"12px",color:"#374151",padding:"10px 10px",borderBottom:"1px solid #f3f4f6",verticalAlign:"top",fontFamily:"Inter,sans-serif"};
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:2000,background:"#f0f4f8",overflowY:"auto"}}>
+      <style>{`
+        @media print {
+          .report-no-print { display: none !important; }
+          body { background: #fff !important; }
+        }
+      `}</style>
+      <div className="report-no-print" style={{position:"sticky",top:0,zIndex:10,background:"#111827",padding:"12px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{color:"#fff",fontSize:"13px",fontWeight:600,fontFamily:"Inter,sans-serif"}}>Market Report — preview</span>
+        <div style={{display:"flex",gap:"8px"}}>
+          <button type="button" onClick={()=>window.print()} style={{padding:"8px 16px",borderRadius:"7px",background:"#4d64d8",color:"#fff",border:"none",cursor:"pointer",fontSize:"12px",fontWeight:600,fontFamily:"Inter,sans-serif"}}>Print / Save as PDF</button>
+          <button type="button" onClick={onClose} style={{padding:"8px 16px",borderRadius:"7px",background:"transparent",color:"#fff",border:"1px solid rgba(255,255,255,0.3)",cursor:"pointer",fontSize:"12px",fontWeight:600,fontFamily:"Inter,sans-serif"}}>Close</button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:"960px",margin:"0 auto",background:"#fff",padding:"48px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}}>
+        <div style={{borderBottom:"2px solid #111827",paddingBottom:"20px",marginBottom:"28px"}}>
+          <div style={{fontSize:"11px",fontWeight:700,color:"#4d64d8",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif",marginBottom:"8px"}}>Market Mapping Report</div>
+          <h1 style={{fontSize:"26px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"6px"}}>{form.role || "Talent Map"}</h1>
+          <p style={{fontSize:"13px",color:"#6b7280",fontFamily:"Inter,sans-serif"}}>
+            {[form.seniority, form.location, form.company && `Hiring for ${form.company}`].filter(Boolean).join(" · ")} · Generated {today}
+          </p>
+        </div>
+
+        {icp && (
+          <div style={{marginBottom:"32px"}}>
+            <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Ideal Candidate Profile</h2>
+            {icp.summary && <p style={{fontSize:"13px",color:"#374151",lineHeight:1.7,fontFamily:"Inter,sans-serif",marginBottom:"12px"}}>{icp.summary}</p>}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"16px",fontSize:"12px",fontFamily:"Inter,sans-serif"}}>
+              <div><strong>Must-haves:</strong> {(icp.mustHaves||[]).join(", ")||"—"}</div>
+              <div><strong>Nice-to-haves:</strong> {(icp.niceToHaves||[]).join(", ")||"—"}</div>
+              <div><strong>Comp range:</strong> {icp.compRange||"—"}</div>
+              <div><strong>Dealbreakers:</strong> {(icp.dealbreakers||[]).join(", ")||"—"}</div>
+            </div>
+          </div>
+        )}
+
+        <div style={{marginBottom:"32px"}}>
+          <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Target Companies — Salary, Level & Poachability</h2>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>
+              <th style={th}>Company</th><th style={th}>Stage</th><th style={th}>Salary Band</th><th style={th}>Level</th>
+              <th style={th}>Relevance</th><th style={th}>Poachability</th><th style={th}>Category</th><th style={th}>Signals</th>
+            </tr></thead>
+            <tbody>
+              {(mapData.companies||[]).map(c=>(
+                <tr key={c.id}>
+                  <td style={{...td,fontWeight:600,color:"#111827"}}>{c.label}{c.crustdataEnriched && <span style={{color:"#059669",fontWeight:700}}> ✓</span>}</td>
+                  <td style={td}>{c.stage||"—"}</td>
+                  <td style={td}>{c.salaryRange||"—"}</td>
+                  <td style={td}>{c.levelEquivalent||"—"}</td>
+                  <td style={td}>{c.confidence ?? "—"}</td>
+                  <td style={td}>{c.poachability ?? "—"}</td>
+                  <td style={td}>{(c.poachabilityCategory||[]).join(", ")||"—"}</td>
+                  <td style={{...td,maxWidth:"220px"}}>{(c.poachabilitySignals||[]).map(s=>s.replace(/^\[(confirmed|signal)\]\s*/i,"")).join("; ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"32px",marginBottom:"32px"}}>
+          <div>
+            <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Adjacent Talent Pools</h2>
+            <ul style={{fontSize:"12px",color:"#374151",fontFamily:"Inter,sans-serif",lineHeight:1.8,paddingLeft:"18px",margin:0}}>
+              {(mapData.adjacent||[]).map(n=><li key={n.id}><strong>{n.label}</strong> — {n.sub}</li>)}
+            </ul>
+          </div>
+          <div>
+            <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Wildcard Bets</h2>
+            <ul style={{fontSize:"12px",color:"#374151",fontFamily:"Inter,sans-serif",lineHeight:1.8,paddingLeft:"18px",margin:0}}>
+              {(mapData.wildcards||[]).map(n=><li key={n.id}><strong>{n.label}</strong> — {n.sub}</li>)}
+            </ul>
+          </div>
+        </div>
+
+        <div>
+          <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Target Titles</h2>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
+            {(mapData.titles||[]).map(t=>(
+              <span key={t.id} style={{fontSize:"12px",padding:"5px 12px",borderRadius:"6px",background:"#eff2fe",color:"#4d64d8",border:"1px solid #d2d8f8",fontFamily:"Inter,sans-serif"}}>{t.label}</span>
+            ))}
+          </div>
+        </div>
+
+        <p style={{marginTop:"40px",paddingTop:"16px",borderTop:"1px solid #f3f4f6",fontSize:"10px",color:"#9ca3af",fontFamily:"Inter,sans-serif"}}>
+          Generated by SourcingCompass · AI-generated market intelligence{mapData.companies?.some(c=>c.crustdataEnriched) ? ", partially verified via Crustdata" : ""} · verify before acting.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Prompt builder ───────────────────────────────────────────────────────────
-function buildPrompt(form) {
+function buildPrompt(form, icp) {
+  const icpContext = icp ? [
+    "",
+    "ICP CONTEXT (from hiring-manager intake interview — use to sharpen every field below):",
+    "Team/why open: "+(icp.teamContext||"n/a"),
+    "Must-haves: "+((icp.mustHaves||[]).join(", ")||"n/a"),
+    "Nice-to-haves: "+((icp.niceToHaves||[]).join(", ")||"n/a"),
+    "Dealbreakers: "+((icp.dealbreakers||[]).join(", ")||"n/a"),
+    "Comp range: "+(icp.compRange||"n/a"),
+  ] : [];
   return [
     "You are a talent intelligence system. Return ONLY compact single-line JSON. No newlines inside JSON. No markdown. No backticks. No explanation.",
     "Role: "+form.role+" | Hiring Company: "+form.company+" | Location: "+form.location+" | Seniority: "+form.seniority+" | Skills: "+form.skills.join(", "),
     "Industries: "+(form.industries.join(", ")||"Any")+" | Exclusions: "+(form.exclusions.join(", ")||"None"),
+    ...icpContext,
     "",
     "CRITICAL: Tailor ALL output to the specific role above. Companies, profiles, signals, titles must match the ROLE and SKILLS — not generic engineering.",
     "",
@@ -694,12 +1144,15 @@ function buildPrompt(form) {
     "",
     "KEEP ALL STRING VALUES UNDER 100 CHARACTERS. Be concise.",
     "poachabilitySignals: exactly 2 signals, prefix [Confirmed] or [Signal]. Max 80 chars each.",
+    "poachabilityCategory: 1-2 short tags from this exact set: Layoffs, Restructuring, Acquisition, Funding Stress, Hiring Freeze, Stock Decline, Growth Stall. Pick whichever best explains the poachability score.",
     "likelyProfile: 1 sentence describing who works in THIS ROLE there. Max 80 chars.",
     "whyRelevant: 1 sentence on why this company is a good source for THIS ROLE. Max 80 chars.",
     "sub in adjacent/wildcards: 1 sentence on skill overlap for THIS ROLE. Max 100 chars.",
+    "salaryRange: realistic total-comp band for THIS role/seniority/location at THIS company, e.g. '$165k-$195k base + equity'. Base on public levels/comp data knowledge (levels.fyi-style). Max 40 chars.",
+    "levelEquivalent: THIS company's internal level name/number equivalent to the searched seniority, e.g. 'L5 / Staff' or 'IC4'. Max 24 chars.",
     "",
     'RETURN EXACTLY THIS COMPACT JSON STRUCTURE (single line, no newlines). The example uses placeholder values — replace with real data for the role above:',
-    '{"companies":[{"id":"c1","label":"COMPANY_NAME","sub":"What they do","tags":["tag1","tag2"],"confidence":85,"stage":"Public","talentDensity":80,"poachability":70,"likelyProfile":"Who works in this role there.","poachabilitySignals":["[Confirmed] Specific recent event.","[Signal] Inferred trend."],"whyRelevant":"Why source from here for this role."}],"adjacent":[{"id":"a1","label":"COMPANY_NAME","sub":"Why skills transfer to this role.","tags":["tag"]}],"wildcards":[{"id":"w1","label":"COMPANY_NAME","sub":"Surprising skill overlap for this role.","tags":["tag"]}],"titles":[{"id":"t1","label":"Exact LinkedIn Title","confidence":90},{"id":"t2","label":"\\"Title Variant A\\" OR \\"Title Variant B\\"","confidence":85}]}',
+    '{"companies":[{"id":"c1","label":"COMPANY_NAME","sub":"What they do","tags":["tag1","tag2"],"confidence":85,"stage":"Public","talentDensity":80,"poachability":70,"salaryRange":"$165k-$195k + equity","levelEquivalent":"L5 / Staff","likelyProfile":"Who works in this role there.","poachabilitySignals":["[Confirmed] Specific recent event.","[Signal] Inferred trend."],"poachabilityCategory":["Layoffs"],"whyRelevant":"Why source from here for this role."}],"adjacent":[{"id":"a1","label":"COMPANY_NAME","sub":"Why skills transfer to this role.","tags":["tag"]}],"wildcards":[{"id":"w1","label":"COMPANY_NAME","sub":"Surprising skill overlap for this role.","tags":["tag"]}],"titles":[{"id":"t1","label":"Exact LinkedIn Title","confidence":90},{"id":"t2","label":"\\"Title Variant A\\" OR \\"Title Variant B\\"","confidence":85}]}',
     "Output ONLY the JSON object. Single line. No whitespace between keys. Start with { end with }.",
   ].join("\n");
 }
@@ -742,6 +1195,79 @@ export default function TalentMap() {
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const allNodes=mapData?[...mapData.companies,...mapData.adjacent,...mapData.wildcards,...mapData.titles]:[];
 
+  // ── Intake Agent ──
+  const [mode,setMode]=useState("quick"); // "quick" | "intake"
+  const [icp,setIcp]=useState(null);
+  const [jobDescription,setJobDescription]=useState("");
+  const [intakeTranscript,setIntakeTranscript]=useState([]);
+  const [intakeLoading,setIntakeLoading]=useState(false);
+  const [intakeReady,setIntakeReady]=useState(false);
+  const [finalizing,setFinalizing]=useState(false);
+  const [intakeError,setIntakeError]=useState("");
+  const [showReport,setShowReport]=useState(false);
+  const [enriching,setEnriching]=useState(false);
+
+  async function sendIntakeTurn(userText) {
+    const next = userText ? [...intakeTranscript, {role:"user",content:userText}] : intakeTranscript;
+    if (userText) setIntakeTranscript(next);
+    setIntakeLoading(true); setIntakeError("");
+    try {
+      const res=await fetch("/api/intake",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({transcript:next, phase:"chat"})});
+      const data=await res.json();
+      if(data.error) throw new Error(data.error);
+      setIntakeTranscript(t=>[...t,{role:"assistant",content:data.reply}]);
+      if(data.readyToFinalize) setIntakeReady(true);
+    } catch(e){ setIntakeError(e.message); }
+    setIntakeLoading(false);
+  }
+
+  useEffect(()=>{
+    if (mode==="intake" && intakeTranscript.length===0 && !intakeLoading) sendIntakeTurn(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  async function finalizeIntake() {
+    if (!intakeTranscript.length) return;
+    setFinalizing(true); setIntakeError("");
+    try {
+      const res=await fetch("/api/intake",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({transcript:intakeTranscript, phase:"finalize"})});
+      const data=await res.json();
+      if(data.error) throw new Error(data.error);
+      setIcp(data.icp); setJobDescription(data.jobDescription||"");
+      setForm(f=>({...f,
+        role: data.icp?.role || f.role,
+        seniority: data.icp?.seniority || f.seniority,
+        location: data.icp?.location || f.location,
+        skills: data.icp?.mustHaves?.length ? data.icp.mustHaves : f.skills,
+      }));
+      setMode("quick");
+    } catch(e){ setIntakeError("Finalize failed: "+e.message); }
+    setFinalizing(false);
+  }
+
+  async function enrichCompanies() {
+    if (!mapData?.companies?.length) return;
+    setEnriching(true); setError("");
+    try {
+      const res=await fetch("/api/enrich",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({companies:mapData.companies.map(c=>c.label)})});
+      const data=await res.json();
+      if(data.error) throw new Error(data.error);
+      if(!data.enriched?.length){ setError(data.message||"No Crustdata matches found for these companies."); setEnriching(false); return; }
+      setMapData(md=>({
+        ...md,
+        companies: md.companies.map(c=>{
+          const hit = data.enriched.find(e=>e.company.toLowerCase()===c.label.toLowerCase());
+          if(!hit || !hit.signals?.length) return c;
+          return { ...c, crustdataEnriched:true, poachabilitySignals:[...hit.signals, ...(c.poachabilitySignals||[])].slice(0,4) };
+        }),
+      }));
+    } catch(e){ setError("Enrich failed: "+e.message); }
+    setEnriching(false);
+  }
+
   async function parseJD() {
     const txt=jdRef.current?.value||""; if(!txt.trim()) return;
     setParsing(true); setError("");
@@ -768,7 +1294,7 @@ export default function TalentMap() {
     try {
       const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},
         signal:generateAbortRef.current.signal,
-        body:JSON.stringify({messages:[{role:"user",content:buildPrompt(form)}]})});
+        body:JSON.stringify({messages:[{role:"user",content:buildPrompt(form, icp)}]})});
       const data=await res.json();
       if(!res.ok){setError("API error "+res.status+": "+JSON.stringify(data));setLoading(false);return;}
       const raw=data.content?.map(b=>b.text||"").join("").trim();
@@ -780,11 +1306,11 @@ export default function TalentMap() {
   }
 
   function exportCSV() {
-    const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Profile","Signals","Why","Tags"]];
-    mapData.companies.forEach(n=>rows.push(["Target",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
-    mapData.adjacent.forEach(n=>rows.push(["Adjacent",n.label,"","","","","","","",(n.tags||[]).join(", ")]));
-    mapData.wildcards.forEach(n=>rows.push(["Wildcard",n.label,"","","","","","","",(n.tags||[]).join(", ")]));
-    mapData.titles.forEach(n=>rows.push(["Title",n.label,"",n.confidence||"","","","","","",(n.tags||[]).join(", ")]));
+    const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Salary Range","Level","Poachability Category","Profile","Signals","Why","Tags"]];
+    mapData.companies.forEach(n=>rows.push(["Target",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.salaryRange||"",n.levelEquivalent||"",(n.poachabilityCategory||[]).join(", "),n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
+    mapData.adjacent.forEach(n=>rows.push(["Adjacent",n.label,"","","","","","","","","","",(n.tags||[]).join(", ")]));
+    mapData.wildcards.forEach(n=>rows.push(["Wildcard",n.label,"","","","","","","","","","",(n.tags||[]).join(", ")]));
+    mapData.titles.forEach(n=>rows.push(["Title",n.label,"",n.confidence||"","","","","","","","","",(n.tags||[]).join(", ")]));
     const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(",")).join("\n");
     const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
     a.download="SourcingCompass_"+form.role.replace(/\s+/g,"_")+".csv"; a.click();
@@ -801,6 +1327,7 @@ export default function TalentMap() {
       .sidebar-input { color: #bfc8d6 !important; }
       @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .sc-spinner { animation: spin 0.8s linear infinite; }
+      @keyframes bounce { from { transform: translateY(0); opacity: 0.4; } to { transform: translateY(-4px); opacity: 1; } }
       @keyframes compassSpin {
         0%   { transform: rotate(0deg); }
         20%  { transform: rotate(200deg); }
@@ -838,8 +1365,26 @@ export default function TalentMap() {
           </div>
         </div>
 
+        {/* Mode toggle */}
+        <div className="px-5 pt-4 flex gap-1.5">
+          {[["quick","Quick Search"],["intake","Intake Agent"]].map(([id,label])=>(
+            <button key={id} type="button" onClick={()=>setMode(id)}
+              style={{flex:1,padding:"7px 10px",borderRadius:"7px",fontSize:"11px",fontWeight:600,cursor:"pointer",fontFamily:"Inter,sans-serif",
+                background: mode===id ? "#24c9a0" : "transparent",
+                color: mode===id ? "#0b1a17" : "#8892b0",
+                border: mode===id ? "1px solid #24c9a0" : "1px solid #2d3461"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
         {/* Form */}
         <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+          {mode==="intake" && (
+            <div style={{fontSize:"11px",color:"#8892b0",background:"#1e2449",border:"1px solid #2d3461",borderRadius:"7px",padding:"10px 12px",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>
+              The Intake Agent is running in the main panel →. Once you generate an ICP, this form auto-fills and you can jump to sourcing.
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <div><label className={labelCls} style={labelStyle}>Role Title</label>
@@ -922,7 +1467,16 @@ export default function TalentMap() {
 
       {/* ── Canvas ── */}
       <div className="flex-1 relative overflow-y-auto min-w-0" style={{background:"#f0f4f8",overflowX:"visible"}}>
-        {!generated && !loading && (
+        {mode==="intake" && !loading && (
+          <IntakeChat transcript={intakeTranscript} onSend={sendIntakeTurn} onFinalize={finalizeIntake}
+            loading={intakeLoading} ready={intakeReady} finalizing={finalizing} error={intakeError}/>
+        )}
+
+        {mode==="quick" && !generated && !loading && icp && (
+          <ICPLanding icp={icp} jobDescription={jobDescription} onGenerateMap={generate} loading={loading}/>
+        )}
+
+        {mode==="quick" && !generated && !loading && !icp && (
           <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"0 32px"}}>
             <div style={{width:"80px",height:"80px",borderRadius:"20px",background:"#ffffff",border:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:"20px",boxShadow:"0 4px 16px rgba(77,100,216,0.1)"}}>
               <svg width="44" height="44" viewBox="0 0 28 28" fill="none">
@@ -938,13 +1492,13 @@ export default function TalentMap() {
               </svg>
             </div>
             <div style={{fontSize:"16px",fontWeight:600,color:"#111827",marginBottom:"8px",fontFamily:"Inter,sans-serif"}}>Configure your search</div>
-            <div style={{fontSize:"13px",color:"#9ca3af",maxWidth:"260px",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>Fill in the role, skills, and location — then generate a talent map</div>
+            <div style={{fontSize:"13px",color:"#9ca3af",maxWidth:"260px",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>Fill in the role, skills, and location — or run the Intake Agent — then generate a talent map</div>
           </div>
         )}
 
         {loading && <LoadingScreen/>}
 
-        {mapData && !loading && (
+        {mode==="quick" && mapData && !loading && (
           <div className="relative z-10 p-8">
             <div style={{marginBottom:"20px",paddingBottom:"18px",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"16px"}}>
               <div>
@@ -957,20 +1511,27 @@ export default function TalentMap() {
                   {[form.company,form.location].filter(Boolean).join(" · ")} · {allNodes.length} nodes mapped
                 </p>
               </div>
-              <button type="button" onClick={exportCSV}
-                style={{flexShrink:0,display:"flex",alignItems:"center",gap:"7px",padding:"9px 18px",borderRadius:"8px",fontSize:"13px",fontWeight:600,border:"1.5px solid #4d64d8",color:"#4d64d8",background:"#f5f7ff",cursor:"pointer",fontFamily:"Inter,sans-serif",transition:"all .15s",whiteSpace:"nowrap"}}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                Export CSV
-              </button>
+              <div style={{display:"flex",gap:"8px",flexShrink:0}}>
+                <button type="button" onClick={()=>setShowReport(true)}
+                  style={{display:"flex",alignItems:"center",gap:"7px",padding:"9px 18px",borderRadius:"8px",fontSize:"13px",fontWeight:600,border:"1.5px solid #f34d77",color:"#f34d77",background:"#fff5f7",cursor:"pointer",fontFamily:"Inter,sans-serif",whiteSpace:"nowrap"}}>
+                  Create Report
+                </button>
+                <button type="button" onClick={exportCSV}
+                  style={{display:"flex",alignItems:"center",gap:"7px",padding:"9px 18px",borderRadius:"8px",fontSize:"13px",fontWeight:600,border:"1.5px solid #4d64d8",color:"#4d64d8",background:"#f5f7ff",cursor:"pointer",fontFamily:"Inter,sans-serif",transition:"all .15s",whiteSpace:"nowrap"}}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Export CSV
+                </button>
+              </div>
             </div>
-            <ResultTabs mapData={mapData} form={form}/>
+            <ResultTabs mapData={mapData} form={form} icp={icp} jobDescription={jobDescription} onEnrich={enrichCompanies} enriching={enriching}/>
           </div>
         )}
       </div>
 
       <Chatbot mapData={mapData} form={form}/>
+      {showReport && mapData && <MarketReport mapData={mapData} form={form} icp={icp} onClose={()=>setShowReport(false)}/>}
     </div>
     </>
   );

@@ -12,6 +12,13 @@ SourcingCompass is a talent intelligence tool that helps recruiters and hiring m
 
 Instead of starting every search from scratch on LinkedIn, SourcingCompass gives you an instant, AI-generated map of the talent landscape for any role — showing you exactly which companies to target, which job titles to search, and how likely people are to move.
 
+The tool now covers the full sourcing workflow:
+
+1. **Intake Agent** — a conversational agent that runs the hiring-manager intake call for you, then synthesizes an ICP and job description.
+2. **Market Mapping** — the original talent map, now with salary bands, level equivalents, and categorized poachability signals (layoffs, restructuring, acquisitions, funding stress).
+3. **Sourcing** — X-ray boolean strings plus live LinkedIn candidate search, merged with real Crustdata people data, with a one-click push into Clay for further enrichment.
+4. **Market Report** — a printable/shareable artifact compiled from the ICP + market map + any real enrichment data.
+
 ---
 
 ## Why does this exist?
@@ -26,18 +33,36 @@ SourcingCompass answers all of these questions in under 30 seconds.
 
 ---
 
+## Intake Agent
+
+Before you even think about sourcing, click **Intake Agent** in the sidebar mode toggle. It runs a chat-based intake interview — one focused question at a time, the way a recruiter would run a real intake call with a hiring manager — covering:
+
+- The team and why the role is open (backfill, growth, new function)
+- Must-have and nice-to-have skills/experience
+- Explicit dealbreakers
+- Seniority/level and internal comp band
+- What success looks like in the first 6–12 months
+- Team culture and interview process
+
+Once it has enough to work with, it offers to **Generate ICP & JD** (or you can wrap up early). That produces a structured Ideal Candidate Profile and a full job description, both shown in a new **ICP & JD** tab, and auto-fills the sidebar form so you can go straight into Market Mapping.
+
 ## What does it show you?
 
-When you generate a map, you get four sections:
+When you generate a map, you get four sections plus a Sourcing tab:
 
 ### 🔵 Target Companies
 The most relevant companies to source from for your role. Each company card shows:
 - **Match Confidence** — how relevant this company is for your specific role (0–100%)
 - **Talent Density** — how many relevant engineers or professionals work there
 - **Poachability Score** — how likely people at this company are to consider a move right now
+- **Poachability Category** — layoffs, restructuring, acquisition, funding stress, hiring freeze, stock decline, or growth stall
 - **Poachability Signals** — specific reasons why they might be open to moving (e.g. recent layoffs, equity concerns, slow growth)
+- **Salary Range** — an estimated total-comp band for the role/seniority/location at that company
+- **Level Equivalent** — that company's internal level/title equivalent to the seniority you searched
 - **Likely Talent Profile** — a one-line description of the type of person who typically works there
 - **Company Stage** — whether it's a startup (Seed, Series A/B/C) or established company (Public, Enterprise)
+
+Click **⟳ Enrich with Crustdata** above the Companies grid to overlay real headcount-growth and funding signals on top of the AI estimates (requires `CRUSTDATA_API_KEY` — see below). Enriched companies get a green **✓ Verified** badge.
 
 ### 🟣 Adjacent Talent Pools
 Companies that aren't an obvious match but whose employees have highly transferable skills. These are the hidden gems most recruiters miss — people who could do the job well even though they don't come from a direct competitor.
@@ -47,6 +72,13 @@ Unconventional companies with a surprising but specific reason their talent woul
 
 ### 🟢 Target Titles
 The exact job titles you should search on LinkedIn or job boards. These are real titles as they appear in actual job postings — not generic labels. Each title includes which companies commonly use it and a match confidence score.
+
+### 🔷 Sourcing
+X-ray boolean search strings (unchanged from before) plus **Live Candidates** — real LinkedIn profiles found via Google X-ray (Serper) merged with real Crustdata people-search results when configured. From there you can **Push to Clay**, which sends the candidate rows to a Clay table webhook so Clay's own enrichment waterfall can run on them.
+
+## Market Report (artifact)
+
+Once a map is generated, click **Create Report** next to Export CSV for a printable, shareable one-pager: ICP summary, the full company table (salary/level/poachability), adjacent pools, wildcards, and target titles. Use **Print / Save as PDF** to export it.
 
 ---
 
@@ -89,6 +121,15 @@ The more specific your inputs, the better your results. Here are some tips:
 - **Add preferred industries** if your hiring manager has a preference — e.g. "Fintech, Data Infrastructure"
 
 ---
+
+## Environment variables
+
+| Variable | Required for | Notes |
+|---|---|---|
+| `LITELLM_API_KEY` / `ANTHROPIC_API_KEY` | Everything (intake, market mapping, X-ray) | At least one is required; LiteLLM proxy is tried first, Anthropic direct is the fallback |
+| `SERPER_API_KEY` | Live LinkedIn candidate search | Optional — without it, only Crustdata people search (if configured) is used |
+| `CRUSTDATA_API_KEY` | Real company enrichment (headcount growth, funding, layoffs) + real people search | Optional — without it, market mapping falls back to AI-estimated signals only. Auth is `Authorization: Token <key>` against `api.crustdata.com`. **Field names in `api/_helpers.js` follow Crustdata's publicly documented screener API; verify against your live account/Postman collection if their schema has changed, since docs could not be fetched from this build environment — every call degrades gracefully (returns null) on a mismatch rather than breaking.** |
+| `CLAY_WEBHOOK_URL` | Default "Push to Clay" target | Optional — the Sourcing tab also lets you paste a webhook URL per-session instead. Clay's integration surface is an inbound webhook per table, not a synchronous search API, so enrichment results land in your Clay workbook, not back in this app |
 
 ## Who built this?
 
