@@ -187,7 +187,7 @@ function CompanyCard({ node }) {
       {(node.salaryRange || node.levelEquivalent) && (
         <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"10px"}}>
           {node.salaryRange && (
-            <span style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#f0fdf4",color:"#16a34a",border:"1px solid #bbf7d0",fontFamily:"Inter,sans-serif"}}>💰 {node.salaryRange}</span>
+            <span title="AI estimate — not sourced from real comp data, sanity-check before using" style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#f0fdf4",color:"#16a34a",border:"1px solid #bbf7d0",fontFamily:"Inter,sans-serif"}}>💰 {node.salaryRange} (est.)</span>
           )}
           {node.levelEquivalent && (
             <span style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",fontFamily:"Inter,sans-serif"}}>{node.levelEquivalent}</span>
@@ -1065,7 +1065,7 @@ function MarketReport({ mapData, form, icp, onClose }) {
           <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Target Companies — Salary, Level & Poachability</h2>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr>
-              <th style={th}>Company</th><th style={th}>Stage</th><th style={th}>Salary Band</th><th style={th}>Level</th>
+              <th style={th}>Company</th><th style={th}>Stage</th><th style={th}>Salary Band (est.)</th><th style={th}>Level</th>
               <th style={th}>Relevance</th><th style={th}>Poachability</th><th style={th}>Category</th><th style={th}>Signals</th>
             </tr></thead>
             <tbody>
@@ -1148,7 +1148,12 @@ function buildPrompt(form, icp) {
     "likelyProfile: 1 sentence describing who works in THIS ROLE there. Max 80 chars.",
     "whyRelevant: 1 sentence on why this company is a good source for THIS ROLE. Max 80 chars.",
     "sub in adjacent/wildcards: 1 sentence on skill overlap for THIS ROLE. Max 100 chars.",
-    "salaryRange: realistic total-comp band for THIS role/seniority/location at THIS company, e.g. '$165k-$195k base + equity'. Base on public levels/comp data knowledge (levels.fyi-style). Max 40 chars.",
+    "",
+    "SALARY CALIBRATION — salaryRange is your single weakest area, be disciplined:",
+    "Step 1 — start from this US total-comp baseline for the searched seniority (do not invent numbers outside these bands): Intern/Junior $80k-$140k | Mid-Level $130k-$175k | Senior $170k-$230k | Lead/Staff $220k-$300k | Principal $280k-$380k | Manager/Sr Manager $190k-$280k | Director $250k-$350k | Senior Director $320k-$430k | VP $350k-$500k | SVP $450k-$650k | C-Level $500k-$900k+.",
+    "Step 2 — scale that baseline for the searched LOCATION using realistic market ratios, and use the LOCAL currency, not always USD: India ≈ 15-30% of US cash, quote in ₹ lakhs (e.g. '₹28L-₹42L + ESOPs'); UK ≈ 65-80%, quote in £; Western Europe ≈ 60-80%, quote in €; Canada ≈ 75-90%, quote in C$; Singapore/Australia ≈ 70-90%, local currency. If location is United States, use $.",
+    "Step 3 — adjust for THIS company's actual stage/tier: public/late-stage companies skew cash-heavy with a higher base within the band; early-stage startups (Seed/A/B) skew toward the low end of base but say so explicitly with 'lower base + meaningful equity', never inflate a startup's cash comp to public-company levels.",
+    "Do not repeat the same number across multiple companies unless their stage and location genuinely match — vary it company to company. salaryRange Max 48 chars.",
     "levelEquivalent: THIS company's internal level name/number equivalent to the searched seniority, e.g. 'L5 / Staff' or 'IC4'. Max 24 chars.",
     "",
     'RETURN EXACTLY THIS COMPACT JSON STRUCTURE (single line, no newlines). The example uses placeholder values — replace with real data for the role above:',
@@ -1306,7 +1311,7 @@ export default function TalentMap() {
   }
 
   function exportCSV() {
-    const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Salary Range","Level","Poachability Category","Profile","Signals","Why","Tags"]];
+    const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Salary Range (AI estimate)","Level","Poachability Category","Profile","Signals","Why","Tags"]];
     mapData.companies.forEach(n=>rows.push(["Target",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.salaryRange||"",n.levelEquivalent||"",(n.poachabilityCategory||[]).join(", "),n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
     mapData.adjacent.forEach(n=>rows.push(["Adjacent",n.label,"","","","","","","","","","",(n.tags||[]).join(", ")]));
     mapData.wildcards.forEach(n=>rows.push(["Wildcard",n.label,"","","","","","","","","","",(n.tags||[]).join(", ")]));
