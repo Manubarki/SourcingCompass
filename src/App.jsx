@@ -53,7 +53,7 @@ MODE TOGGLE (top of sidebar):
 
 RESULT TABS:
 0. ICP & JD (pink, only after running Intake Agent) — the synthesized Ideal Candidate Profile fields plus the full generated job description, with copy/download actions.
-1. Target Companies (blue) — Real companies employing people with your exact skills. Each card shows: Relevance (skill match 0-100), Talent Density, Poachability, Poachability Category (Layoffs/Restructuring/Acquisition/Funding Stress/Hiring Freeze/Stock Decline/Growth Stall), Salary Range (estimated comp band), Level Equivalent (that company's internal level for the searched seniority), Stage badge, "Why Relevant" tooltip on hover. A "⟳ Enrich with Crustdata" button overlays real headcount-growth/funding signals when CRUSTDATA_API_KEY is configured — enriched cards get a green "✓ Verified" badge.
+1. Target Companies (blue) — Real companies employing people with your exact skills. Each card shows: Relevance (skill match 0-100), Talent Density, Poachability, Poachability Category (Layoffs/Restructuring/Acquisition/Funding Stress/Hiring Freeze/Stock Decline/Growth Stall), Level Equivalent (that company's internal level for the searched seniority), Stage badge, "Why Relevant" tooltip on hover. A "⟳ Enrich with Crustdata" button overlays real headcount-growth/funding signals when CRUSTDATA_API_KEY is configured — enriched cards get a green "✓ Verified" badge.
 2. Adjacent Talent Pools (purple) — Companies with transferable skills, not direct competitors.
 3. Wildcard Bets (orange) — Surprising non-obvious tech companies with strong skill overlap.
 4. Target Titles (green) — Exact job titles as they appear across companies.
@@ -64,16 +64,16 @@ SCORES EXPLAINED:
 - High relevance ≠ best target. A 70% relevance + 85% poachability company often beats 95% relevance + 30% poachability.
 - Talent Density: how concentrated relevant talent is.
 - Poachability signals: [Confirmed] = specific reported fact. [Signal] = inferred pattern. Crustdata-enriched signals are real headcount/funding data, not AI guesses.
-- Salary Range / Level Equivalent are AI-estimated (levels.fyi-style) unless Crustdata enrichment is shown.
+- Level Equivalent is AI-estimated unless Crustdata enrichment is shown.
 
 MARKET REPORT (artifact):
-"Create Report" button next to Export CSV opens a printable/shareable one-pager — ICP summary, full company table with salary/level/poachability, adjacent pools, wildcards, target titles. Use "Print / Save as PDF".
+"Create Report" button next to Export CSV opens a printable/shareable one-pager — ICP summary, full company table with level/poachability, adjacent pools, wildcards, target titles. Use "Print / Save as PDF".
 
 JD PARSER (Quick Search only):
 Paste any job description → auto-extracts role title, seniority, key skills.
 
 CSV EXPORT:
-Downloads all sections including salary range, level, and poachability category as a spreadsheet.
+Downloads all sections including level and poachability category as a spreadsheet.
 
 COMPANY MEMORY:
 Grounded in 2000+ verified ML/AI/Data ecosystem companies from the MAD Firstmark landscape.
@@ -184,8 +184,9 @@ function CompanyCard({ node }) {
         </div>
       </div>
       {node.sub && <div style={{fontSize:"13px",color:"#6b7280",marginBottom:"10px",fontFamily:"Inter,sans-serif"}}>{node.sub}</div>}
-      {(node.salaryRange || node.levelEquivalent) && (
+      {node.levelEquivalent && (
         <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"10px"}}>
+          <span style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",fontFamily:"Inter,sans-serif"}}>{node.levelEquivalent}</span>
           {node.salaryRange && (
             <span title="AI estimate — not sourced from real comp data, sanity-check before using" style={{fontSize:"11px",padding:"3px 9px",borderRadius:"5px",fontWeight:600,background:"#f0fdf4",color:"#16a34a",border:"1px solid #bbf7d0",fontFamily:"Inter,sans-serif"}}>💰 {node.salaryRange} (est.)</span>
           )}
@@ -1062,9 +1063,10 @@ function MarketReport({ mapData, form, icp, onClose }) {
         )}
 
         <div style={{marginBottom:"32px"}}>
-          <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Target Companies — Salary, Level & Poachability</h2>
+          <h2 style={{fontSize:"14px",fontWeight:700,color:"#111827",fontFamily:"Inter,sans-serif",marginBottom:"10px",textTransform:"uppercase",letterSpacing:"0.06em"}}>Target Companies — Level & Poachability</h2>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr>
+              <th style={th}>Company</th><th style={th}>Stage</th><th style={th}>Level</th>
               <th style={th}>Company</th><th style={th}>Stage</th><th style={th}>Salary Band (est.)</th><th style={th}>Level</th>
               <th style={th}>Relevance</th><th style={th}>Poachability</th><th style={th}>Category</th><th style={th}>Signals</th>
             </tr></thead>
@@ -1073,7 +1075,6 @@ function MarketReport({ mapData, form, icp, onClose }) {
                 <tr key={c.id}>
                   <td style={{...td,fontWeight:600,color:"#111827"}}>{c.label}{c.crustdataEnriched && <span style={{color:"#059669",fontWeight:700}}> ✓</span>}</td>
                   <td style={td}>{c.stage||"—"}</td>
-                  <td style={td}>{c.salaryRange||"—"}</td>
                   <td style={td}>{c.levelEquivalent||"—"}</td>
                   <td style={td}>{c.confidence ?? "—"}</td>
                   <td style={td}>{c.poachability ?? "—"}</td>
@@ -1141,6 +1142,7 @@ function buildPrompt(form, icp) {
     "2. adjacent — 4 real companies with transferable skills for THIS specific role.",
     "3. wildcards — 3 surprising companies for THIS role. BANNED: Airbnb, Netflix, Uber, Meta, Google, Amazon, Apple, Microsoft, Stripe.",
     "4. titles — 5 real LinkedIn job titles for THIS role. Include seniority + functional variants. Combine similar with OR syntax.",
+    "5. levelEquivalent MUST reflect the specific LOCATION and seniority given above.",
     "",
     "KEEP ALL STRING VALUES UNDER 100 CHARACTERS. Be concise.",
     "poachabilitySignals: exactly 2 signals, prefix [Confirmed] or [Signal]. Max 80 chars each.",
@@ -1157,7 +1159,7 @@ function buildPrompt(form, icp) {
     "levelEquivalent: THIS company's internal level name/number equivalent to the searched seniority, e.g. 'L5 / Staff' or 'IC4'. Max 24 chars.",
     "",
     'RETURN EXACTLY THIS COMPACT JSON STRUCTURE (single line, no newlines). The example uses placeholder values — replace with real data for the role above:',
-    '{"companies":[{"id":"c1","label":"COMPANY_NAME","sub":"What they do","tags":["tag1","tag2"],"confidence":85,"stage":"Public","talentDensity":80,"poachability":70,"salaryRange":"$165k-$195k + equity","levelEquivalent":"L5 / Staff","likelyProfile":"Who works in this role there.","poachabilitySignals":["[Confirmed] Specific recent event.","[Signal] Inferred trend."],"poachabilityCategory":["Layoffs"],"whyRelevant":"Why source from here for this role."}],"adjacent":[{"id":"a1","label":"COMPANY_NAME","sub":"Why skills transfer to this role.","tags":["tag"]}],"wildcards":[{"id":"w1","label":"COMPANY_NAME","sub":"Surprising skill overlap for this role.","tags":["tag"]}],"titles":[{"id":"t1","label":"Exact LinkedIn Title","confidence":90},{"id":"t2","label":"\\"Title Variant A\\" OR \\"Title Variant B\\"","confidence":85}]}',
+    '{"companies":[{"id":"c1","label":"COMPANY_NAME","sub":"What they do","tags":["tag1","tag2"],"confidence":85,"stage":"Public","talentDensity":80,"poachability":70,"levelEquivalent":"L5 / Staff","likelyProfile":"Who works in this role there.","poachabilitySignals":["[Confirmed] Specific recent event.","[Signal] Inferred trend."],"poachabilityCategory":["Layoffs"],"whyRelevant":"Why source from here for this role."}],"adjacent":[{"id":"a1","label":"COMPANY_NAME","sub":"Why skills transfer to this role.","tags":["tag"]}],"wildcards":[{"id":"w1","label":"COMPANY_NAME","sub":"Surprising skill overlap for this role.","tags":["tag"]}],"titles":[{"id":"t1","label":"Exact LinkedIn Title","confidence":90},{"id":"t2","label":"\\"Title Variant A\\" OR \\"Title Variant B\\"","confidence":85}]}',
     "Output ONLY the JSON object. Single line. No whitespace between keys. Start with { end with }.",
   ].join("\n");
 }
@@ -1166,10 +1168,13 @@ const EMPTY={companies:[],adjacent:[],wildcards:[],titles:[]};
 const LOCATIONS=["United States","Canada","India","United Kingdom","Europe","Australia","Singapore"];
 
 // ─── Resizable sidebar ────────────────────────────────────────────────────────
+const SIDEBAR_COLLAPSED_WIDTH = 44;
+
 function ResizableSidebar({children}) {
   const [width,setWidth]=useState(280);
+  const [collapsed,setCollapsed]=useState(false);
   const dragging=useRef(false); const startX=useRef(0); const startW=useRef(0);
-  function onMouseDown(e){dragging.current=true;startX.current=e.clientX;startW.current=width;document.body.style.cursor="col-resize";document.body.style.userSelect="none";}
+  function onMouseDown(e){if(collapsed)return;dragging.current=true;startX.current=e.clientX;startW.current=width;document.body.style.cursor="col-resize";document.body.style.userSelect="none";}
   useEffect(()=>{
     function onMouseMove(e){if(!dragging.current)return;setWidth(Math.min(480,Math.max(220,startW.current+(e.clientX-startX.current))));}
     function onMouseUp(){if(!dragging.current)return;dragging.current=false;document.body.style.cursor="";document.body.style.userSelect="";}
@@ -1177,11 +1182,21 @@ function ResizableSidebar({children}) {
     return()=>{window.removeEventListener("mousemove",onMouseMove);window.removeEventListener("mouseup",onMouseUp);};
   },[]);
   return (
-    <div style={{width,flexShrink:0,position:"relative",background:"#1a1f3c",borderRight:"1px solid #2d3461"}} className="flex flex-col z-10">
-      {children}
-      <div onMouseDown={onMouseDown} className="absolute top-0 right-0 w-1 h-full cursor-col-resize group z-20">
-        <div className="absolute top-0 right-0 w-1 h-full transition-all group-hover:bg-sidebar-accent/30"/>
+    <div style={{width: collapsed?SIDEBAR_COLLAPSED_WIDTH:width,flexShrink:0,position:"relative",background:"#1a1f3c",borderRight:"1px solid #2d3461",transition:"width .15s ease"}} className="flex flex-col z-10">
+      <button type="button" onClick={()=>setCollapsed(c=>!c)} title={collapsed?"Expand sidebar":"Collapse sidebar"}
+        style={{position:"absolute",top:"14px",right: collapsed?undefined:"-13px",left: collapsed?"9px":undefined,
+          width:"26px",height:"26px",borderRadius:"50%",background:"#1e2449",border:"1px solid #2d3461",color:"#8892b0",
+          display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",zIndex:30,fontSize:"12px",padding:0}}>
+        {collapsed ? "›" : "‹"}
+      </button>
+      <div style={{display:collapsed?"none":"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+        {children}
       </div>
+      {!collapsed && (
+        <div onMouseDown={onMouseDown} className="absolute top-0 right-0 w-1 h-full cursor-col-resize group z-20">
+          <div className="absolute top-0 right-0 w-1 h-full transition-all group-hover:bg-sidebar-accent/30"/>
+        </div>
+      )}
     </div>
   );
 }
@@ -1311,6 +1326,8 @@ export default function TalentMap() {
   }
 
   function exportCSV() {
+    const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Level","Poachability Category","Profile","Signals","Why","Tags"]];
+    mapData.companies.forEach(n=>rows.push(["Target",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.levelEquivalent||"",(n.poachabilityCategory||[]).join(", "),n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
     const rows=[["Section","Company/Title","Stage","Relevance","Density","Poachability","Salary Range (AI estimate)","Level","Poachability Category","Profile","Signals","Why","Tags"]];
     mapData.companies.forEach(n=>rows.push(["Target",n.label,n.stage||"",n.confidence||"",n.talentDensity||"",n.poachability||"",n.salaryRange||"",n.levelEquivalent||"",(n.poachabilityCategory||[]).join(", "),n.likelyProfile||"",(n.poachabilitySignals||[]).join(" | "),n.whyRelevant||"",(n.tags||[]).join(", ")]));
     mapData.adjacent.forEach(n=>rows.push(["Adjacent",n.label,"","","","","","","","","","",(n.tags||[]).join(", ")]));
