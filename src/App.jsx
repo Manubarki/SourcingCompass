@@ -482,7 +482,7 @@ function RepoResultCard({ repo, onClick, selected }) {
           {repo.description}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>
         <span>★ {repo.stargazers_count.toLocaleString()}</span>
         <span>⑂ {repo.forks_count.toLocaleString()}</span>
         {repo.language && <span style={{ color: "#0891b2" }}>{repo.language}</span>}
@@ -519,7 +519,7 @@ function ContributorRow({ c, token, repoName, onUpdate }) {
           <div style={{ minWidth: 0 }}>
             {c.name && <div style={{ fontSize: "12px", fontWeight: 600, color: "#111827", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>{c.name}</div>}
             <a href={c.html_url} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#4d64d8", fontFamily: "Inter,sans-serif", textDecoration: "none" }}>@{c.login}</a>
-            {c.company && <div style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>{c.company}</div>}
+            {c.company && <div style={{ fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>{c.company}</div>}
           </div>
         </div>
       </td>
@@ -528,14 +528,14 @@ function ContributorRow({ c, token, repoName, onUpdate }) {
         {c.email && c.email !== "not found" && c.email !== "error" ? (
           <a href={`mailto:${c.email}`} style={{ fontSize: "11px", color: "#16a34a", fontFamily: "Inter,sans-serif" }}>{c.email}</a>
         ) : c.email === "not found" ? (
-          <span style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>not found</span>
+          <span style={{ fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>not found</span>
         ) : c.email === "error" ? (
           <span style={{ fontSize: "11px", color: "#dc2626", fontFamily: "Inter,sans-serif" }}>error</span>
         ) : finding ? (
           <div style={{ width: "12px", height: "12px", border: "2px solid #4d64d8", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
         ) : (
-          <button type="button" onClick={findEmail} title="Find email from commit patches"
-            style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "5px", border: "1px solid #d2d8f8", background: "#eff2fe", color: "#4d64d8", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+          <button type="button" onClick={findEmail} title="Find email from commit patches" className="gh-btn gh-btn-pause"
+            style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "5px", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
             Find
           </button>
         )}
@@ -713,18 +713,40 @@ function GitHubContributorSourcing() {
 
   return (
     <div>
-      <p style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
+      <style>{`
+        .gh-input { color:#111827; transition: border-color .15s, box-shadow .15s; }
+        .gh-input::placeholder { color:#6b7280; }
+        .gh-input:focus { outline:none; border-color:#4d64d8; box-shadow:0 0 0 3px rgba(77,100,216,0.15); }
+        .gh-btn { transition: background .15s, border-color .15s, box-shadow .15s, transform .05s; cursor:pointer; }
+        .gh-btn:active:not(:disabled) { transform: translateY(1px); }
+        .gh-btn:disabled { cursor:not-allowed !important; }
+        .gh-btn-primary { background:#24292f; color:#fff; border:none; }
+        .gh-btn-primary:hover:not(:disabled) { background:#000; box-shadow:0 2px 8px rgba(0,0,0,0.25); }
+        .gh-btn-primary:disabled { background:#e5e7eb; color:#9ca3af; cursor:not-allowed; }
+        .gh-btn-secondary { background:#fff; border:1px solid #d1d5db; color:#374151; }
+        .gh-btn-secondary:hover:not(:disabled) { background:#f3f4f6; border-color:#9ca3af; color:#111827; }
+        .gh-btn-secondary:disabled { opacity:0.45; cursor:not-allowed; }
+        .gh-btn-page:hover:not(:disabled) { border-color:#4d64d8 !important; color:#4d64d8 !important; }
+        .gh-btn-page:disabled { opacity:0.4; cursor:not-allowed; }
+        .gh-btn-accent { background:#4d64d8; color:#fff; border:none; }
+        .gh-btn-accent:hover:not(:disabled) { background:#3c50b8; box-shadow:0 2px 8px rgba(77,100,216,0.35); }
+        .gh-btn-success { background:#f0fdf4; border:1px solid #16a34a; color:#16a34a; }
+        .gh-btn-success:hover:not(:disabled) { background:#dcfce7; }
+        .gh-btn-pause { background:#eff2fe; border:1px solid #d2d8f8; color:#4d64d8; }
+        .gh-btn-pause:hover:not(:disabled) { background:#d2d8f8; }
+      `}</style>
+      <p style={{ fontSize: "12px", color: "#6b7280", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
         Search open-source repos in your target stack, extract real contributors, enrich their profiles, and find emails — people who actually write this code.
       </p>
 
       {/* Search row */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
         <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()}
-          placeholder='Search repos or try "top 10 repos in cloud infra"'
-          style={{ flex: 1, fontSize: "12px", padding: "9px 12px", borderRadius: "7px", border: "1px solid #e5e7eb", fontFamily: "Inter,sans-serif" }} />
-        <button type="button" onClick={handleSearch} disabled={searchLoading || !query.trim()}
-          style={{ padding: "9px 16px", borderRadius: "7px", fontSize: "12px", fontWeight: 600, border: "none",
-            background: "#24292f", color: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif", opacity: (searchLoading || !query.trim()) ? 0.5 : 1, whiteSpace: "nowrap" }}>
+          placeholder='Search repos or try "top 10 repos in cloud infra"' className="gh-input"
+          style={{ flex: 1, fontSize: "12px", padding: "9px 12px", borderRadius: "7px", border: "1px solid #d1d5db", fontFamily: "Inter,sans-serif" }} />
+        <button type="button" onClick={handleSearch} disabled={searchLoading || !query.trim()} className="gh-btn gh-btn-primary"
+          style={{ padding: "9px 16px", borderRadius: "7px", fontSize: "12px", fontWeight: 600,
+            cursor: "pointer", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap" }}>
           {searchLoading ? "Searching…" : "Search"}
         </button>
       </div>
@@ -732,14 +754,14 @@ function GitHubContributorSourcing() {
       {/* Token input */}
       <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
         <input type={showToken ? "text" : "password"} value={token} onChange={e => setToken(e.target.value)}
-          placeholder="GitHub Personal Access Token (optional)" autoComplete="new-password" name="gh_token_nofill" data-1p-ignore data-lpignore="true"
-          style={{ flex: 1, fontSize: "11px", padding: "7px 10px", borderRadius: "6px", border: "1px solid #e5e7eb", fontFamily: "Inter,sans-serif" }} />
-        <button type="button" onClick={() => setShowToken(s => !s)}
-          style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+          placeholder="GitHub Personal Access Token (optional)" autoComplete="new-password" name="gh_token_nofill" data-1p-ignore data-lpignore="true" className="gh-input"
+          style={{ flex: 1, fontSize: "11px", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontFamily: "Inter,sans-serif" }} />
+        <button type="button" onClick={() => setShowToken(s => !s)} className="gh-btn gh-btn-secondary"
+          style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "6px", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
           {showToken ? "Hide" : "Show"}
         </button>
       </div>
-      <p style={{ fontSize: "10.5px", color: "#9ca3af", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
+      <p style={{ fontSize: "10.5px", color: "#6b7280", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
         Optional — raises the GitHub rate limit from 60 to 5,000 requests/hour. Stored in memory only, never sent anywhere but api.github.com.
       </p>
 
@@ -758,8 +780,8 @@ function GitHubContributorSourcing() {
       {repos.length > 0 && (
         <div style={{ marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-            <span style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>{totalCount.toLocaleString()} repositories — click to select</span>
-            <span style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>Page {currentPage} of {totalPages}</span>
+            <span style={{ fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>{totalCount.toLocaleString()} repositories — click to select</span>
+            <span style={{ fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>Page {currentPage} of {totalPages}</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {repos.map(repo => (
@@ -768,17 +790,17 @@ function GitHubContributorSourcing() {
           </div>
           {totalPages > 1 && (
             <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "12px", flexWrap: "wrap" }}>
-              <button type="button" disabled={currentPage <= 1 || searchLoading} onClick={() => doSearch(currentQuery, currentPage - 1)}
-                style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif", opacity: currentPage <= 1 ? 0.4 : 1 }}>‹ Prev</button>
+              <button type="button" disabled={currentPage <= 1 || searchLoading} onClick={() => doSearch(currentQuery, currentPage - 1)} className="gh-btn gh-btn-page"
+                style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", color: "#374151", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>‹ Prev</button>
               {generateGhPageNumbers(currentPage, totalPages).map((p, i) => p === "..." ? (
                 <span key={`e${i}`} style={{ fontSize: "11px", color: "#9ca3af", padding: "5px 4px" }}>…</span>
               ) : (
-                <button key={p} type="button" disabled={searchLoading} onClick={() => doSearch(currentQuery, p)}
+                <button key={p} type="button" disabled={searchLoading} onClick={() => doSearch(currentQuery, p)} className="gh-btn gh-btn-page"
                   style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", cursor: "pointer", fontFamily: "Inter,sans-serif",
-                    border: `1px solid ${p === currentPage ? "#4d64d8" : "#e5e7eb"}`, background: p === currentPage ? "#4d64d8" : "#fff", color: p === currentPage ? "#fff" : "#374151" }}>{p}</button>
+                    border: `1px solid ${p === currentPage ? "#4d64d8" : "#d1d5db"}`, background: p === currentPage ? "#4d64d8" : "#fff", color: p === currentPage ? "#fff" : "#374151" }}>{p}</button>
               ))}
-              <button type="button" disabled={currentPage >= totalPages || searchLoading} onClick={() => doSearch(currentQuery, currentPage + 1)}
-                style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif", opacity: currentPage >= totalPages ? 0.4 : 1 }}>Next ›</button>
+              <button type="button" disabled={currentPage >= totalPages || searchLoading} onClick={() => doSearch(currentQuery, currentPage + 1)} className="gh-btn gh-btn-page"
+                style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", border: "1px solid #d1d5db", background: "#fff", color: "#374151", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>Next ›</button>
             </div>
           )}
         </div>
@@ -795,8 +817,8 @@ function GitHubContributorSourcing() {
                 {selectedRepo.description && <div style={{ fontSize: "12px", color: "#6b7280", fontFamily: "Inter,sans-serif", marginTop: "2px" }}>{selectedRepo.description}</div>}
               </div>
             </div>
-            <button type="button" onClick={() => setSelectedRepo(null)} title="Deselect"
-              style={{ fontSize: "13px", color: "#9ca3af", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>✕</button>
+            <button type="button" onClick={() => setSelectedRepo(null)} title="Deselect" className="gh-btn gh-btn-secondary"
+              style={{ fontSize: "13px", borderRadius: "6px", width: "24px", height: "24px", padding: 0, cursor: "pointer", flexShrink: 0 }}>✕</button>
           </div>
 
           {contributors.length === 0 && !extracting ? (
@@ -806,9 +828,9 @@ function GitHubContributorSourcing() {
                   <strong>{contributorCount.toLocaleString()}</strong> contributors
                 </span>
               )}
-              <button type="button" onClick={handleExtract}
-                style={{ padding: "9px 18px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: "none",
-                  background: "#24292f", color: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+              <button type="button" onClick={handleExtract} className="gh-btn gh-btn-primary"
+                style={{ padding: "9px 18px", borderRadius: "8px", fontSize: "12px", fontWeight: 600,
+                  cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
                 Extract Contributors
               </button>
             </div>
@@ -826,22 +848,22 @@ function GitHubContributorSourcing() {
                 <span style={{ fontSize: "12px", color: "#374151", fontFamily: "Inter,sans-serif" }}>
                   <strong>{filteredContributors.length}{locationFilter ? `/${contributors.length}` : ""}</strong> contributors
                 </span>
-                <input value={locationFilter} onChange={e => setLocationFilter(e.target.value)} placeholder="Filter by location…"
-                  style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "6px", border: "1px solid #e5e7eb", width: "150px", fontFamily: "Inter,sans-serif" }} />
+                <input value={locationFilter} onChange={e => setLocationFilter(e.target.value)} placeholder="Filter by location…" className="gh-input"
+                  style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "6px", border: "1px solid #d1d5db", width: "150px", fontFamily: "Inter,sans-serif" }} />
 
                 <div style={{ flex: 1 }} />
 
                 {enriching && enrichProgress ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>
                     <span>{enrichPaused ? "paused" : "enriching"} {enrichProgress.current}/{enrichProgress.total}</span>
-                    <button type="button" onClick={handleTogglePause}
-                      style={{ fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "5px", border: "1px solid #d2d8f8", background: "#eff2fe", color: "#4d64d8", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                    <button type="button" onClick={handleTogglePause} className="gh-btn gh-btn-pause"
+                      style={{ fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "5px", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
                       {enrichPaused ? "Resume" : "Pause"}
                     </button>
                   </div>
                 ) : !contributors.every(c => c.enriched) ? (
-                  <button type="button" onClick={handleEnrich}
-                    style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", border: "none", background: "#4d64d8", color: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                  <button type="button" onClick={handleEnrich} className="gh-btn gh-btn-accent"
+                    style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
                     Enrich Profiles
                   </button>
                 ) : null}
@@ -849,14 +871,14 @@ function GitHubContributorSourcing() {
                 {bulkFinding && bulkProgress ? (
                   <span style={{ fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>Finding emails {bulkProgress.current}/{bulkProgress.total}</span>
                 ) : contributors.some(c => !c.email && !c.isAnonymous) ? (
-                  <button type="button" onClick={handleFindAllEmails}
-                    style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", border: "1px solid #16a34a", background: "#f0fdf4", color: "#16a34a", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                  <button type="button" onClick={handleFindAllEmails} className="gh-btn gh-btn-success"
+                    style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
                     Find All Emails
                   </button>
                 ) : null}
 
-                <button type="button" onClick={handleExport}
-                  style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", color: "#374151", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                <button type="button" onClick={handleExport} className="gh-btn gh-btn-secondary"
+                  style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
                   Export CSV
                 </button>
               </div>
@@ -867,7 +889,7 @@ function GitHubContributorSourcing() {
                   <thead style={{ position: "sticky", top: 0, background: "#f9fafb" }}>
                     <tr>
                       {["User", "Contributions", "Email", "Location", "Socials"].map(h => (
-                        <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: "10px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "Inter,sans-serif" }}>{h}</th>
+                        <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: "10px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "Inter,sans-serif" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
