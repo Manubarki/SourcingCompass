@@ -1141,6 +1141,7 @@ function buildPrompt(form, icp) {
     "2. adjacent — 4 real companies with transferable skills for THIS specific role.",
     "3. wildcards — 3 surprising companies for THIS role. BANNED: Airbnb, Netflix, Uber, Meta, Google, Amazon, Apple, Microsoft, Stripe.",
     "4. titles — 5 real LinkedIn job titles for THIS role. Include seniority + functional variants. Combine similar with OR syntax.",
+    "5. salaryRange and levelEquivalent MUST reflect the specific LOCATION given above, not a default US market — see salaryRange rule below.",
     "",
     "KEEP ALL STRING VALUES UNDER 100 CHARACTERS. Be concise.",
     "poachabilitySignals: exactly 2 signals, prefix [Confirmed] or [Signal]. Max 80 chars each.",
@@ -1148,11 +1149,11 @@ function buildPrompt(form, icp) {
     "likelyProfile: 1 sentence describing who works in THIS ROLE there. Max 80 chars.",
     "whyRelevant: 1 sentence on why this company is a good source for THIS ROLE. Max 80 chars.",
     "sub in adjacent/wildcards: 1 sentence on skill overlap for THIS ROLE. Max 100 chars.",
-    "salaryRange: realistic total-comp band for THIS role/seniority/location at THIS company, e.g. '$165k-$195k base + equity'. Base on public levels/comp data knowledge (levels.fyi-style). Max 40 chars.",
+    "salaryRange: realistic total-comp band for THIS role/seniority AT THIS company, LOCALIZED to the LOCATION given above — use that market's typical pay level and currency symbol (e.g. £ for United Kingdom, € for Europe, ₹ for India, C$ for Canada, A$ for Australia, S$ for Singapore, $ only for United States). Do NOT default to US-dollar bands for a non-US location — a UK/India/etc. band must differ from the US figure for the same role and company. Base on public levels/comp data knowledge (levels.fyi-style, localized). Max 40 chars.",
     "levelEquivalent: THIS company's internal level name/number equivalent to the searched seniority, e.g. 'L5 / Staff' or 'IC4'. Max 24 chars.",
     "",
-    'RETURN EXACTLY THIS COMPACT JSON STRUCTURE (single line, no newlines). The example uses placeholder values — replace with real data for the role above:',
-    '{"companies":[{"id":"c1","label":"COMPANY_NAME","sub":"What they do","tags":["tag1","tag2"],"confidence":85,"stage":"Public","talentDensity":80,"poachability":70,"salaryRange":"$165k-$195k + equity","levelEquivalent":"L5 / Staff","likelyProfile":"Who works in this role there.","poachabilitySignals":["[Confirmed] Specific recent event.","[Signal] Inferred trend."],"poachabilityCategory":["Layoffs"],"whyRelevant":"Why source from here for this role."}],"adjacent":[{"id":"a1","label":"COMPANY_NAME","sub":"Why skills transfer to this role.","tags":["tag"]}],"wildcards":[{"id":"w1","label":"COMPANY_NAME","sub":"Surprising skill overlap for this role.","tags":["tag"]}],"titles":[{"id":"t1","label":"Exact LinkedIn Title","confidence":90},{"id":"t2","label":"\\"Title Variant A\\" OR \\"Title Variant B\\"","confidence":85}]}',
+    'RETURN EXACTLY THIS COMPACT JSON STRUCTURE (single line, no newlines). The example uses placeholder values, including a placeholder currency symbol — replace with real data localized to the LOCATION given above:',
+    '{"companies":[{"id":"c1","label":"COMPANY_NAME","sub":"What they do","tags":["tag1","tag2"],"confidence":85,"stage":"Public","talentDensity":80,"poachability":70,"salaryRange":"[LOCAL_CURRENCY]165k-195k + equity","levelEquivalent":"L5 / Staff","likelyProfile":"Who works in this role there.","poachabilitySignals":["[Confirmed] Specific recent event.","[Signal] Inferred trend."],"poachabilityCategory":["Layoffs"],"whyRelevant":"Why source from here for this role."}],"adjacent":[{"id":"a1","label":"COMPANY_NAME","sub":"Why skills transfer to this role.","tags":["tag"]}],"wildcards":[{"id":"w1","label":"COMPANY_NAME","sub":"Surprising skill overlap for this role.","tags":["tag"]}],"titles":[{"id":"t1","label":"Exact LinkedIn Title","confidence":90},{"id":"t2","label":"\\"Title Variant A\\" OR \\"Title Variant B\\"","confidence":85}]}',
     "Output ONLY the JSON object. Single line. No whitespace between keys. Start with { end with }.",
   ].join("\n");
 }
