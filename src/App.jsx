@@ -317,7 +317,7 @@ function Section({ cat, nodes, extra }) {
 }
 
 // ─── Live candidate search + Push to Clay ────────────────────────────────────
-function CandidateSearch({ mapData, form }) {
+function CrustdataSearch({ mapData, form }) {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
   const [candidates, setCandidates] = useState(null);
@@ -366,12 +366,7 @@ function CandidateSearch({ mapData, form }) {
   }
 
   return (
-    <div style={{marginTop:"24px",paddingTop:"20px",borderTop:"1px solid #f3f4f6"}}>
-      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-        <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"#4d64d8",boxShadow:"0 0 0 3px rgba(77,100,216,0.15)"}}/>
-        <span style={{fontSize:"11px",fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif"}}>Live Candidates</span>
-        <div style={{flex:1,height:"1px",background:"#f3f4f6"}}/>
-      </div>
+    <div>
       <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"16px",fontFamily:"Inter,sans-serif"}}>
         Searches real LinkedIn profiles at your target companies via Google X-ray (Serper), merged with Crustdata people search when configured.
       </p>
@@ -717,12 +712,7 @@ function GitHubContributorSourcing() {
     : contributors;
 
   return (
-    <div style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid #f3f4f6" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#24292f", boxShadow: "0 0 0 3px rgba(36,41,47,0.12)" }} />
-        <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "Inter,sans-serif" }}>GitHub Contributor Sourcing</span>
-        <div style={{ flex: 1, height: "1px", background: "#f3f4f6" }} />
-      </div>
+    <div>
       <p style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
         Search open-source repos in your target stack, extract real contributors, enrich their profiles, and find emails — people who actually write this code.
       </p>
@@ -896,8 +886,8 @@ function GitHubContributorSourcing() {
   );
 }
 
-// ─── Sourcing tab: X-Ray Builder + live candidates ───────────────────────────
-function SourcingTab({ mapData, form }) {
+// ─── Sourcing tab: X-Ray Builder + Crustdata search + GitHub sourcing ────────
+function XraySearchPanel({ mapData, form }) {
   const [copied, setCopied]   = useState(null);
   const [loading, setLoading] = useState(false);
   const [result,  setResult]  = useState(null);
@@ -941,12 +931,6 @@ function SourcingTab({ mapData, form }) {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-        <div style={{width:"8px",height:"8px",borderRadius:"50%",background:"#0891b2",boxShadow:"0 0 0 3px rgba(8,145,178,0.15)"}}/>
-        <span style={{fontSize:"11px",fontWeight:600,color:"#374151",textTransform:"uppercase",letterSpacing:"0.1em",fontFamily:"Inter,sans-serif"}}>AI X-Ray Search Strings</span>
-        <div style={{flex:1,height:"1px",background:"#f3f4f6"}}/>
-      </div>
       <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"20px",fontFamily:"Inter,sans-serif"}}>
         AI researches your skills ecosystem — finds alternative keywords, related tech, and community terms — then generates intelligent boolean strings.
       </p>
@@ -1035,9 +1019,53 @@ function SourcingTab({ mapData, form }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
 
-      <CandidateSearch mapData={mapData} form={form}/>
-      <GitHubContributorSourcing/>
+// ─── Sourcing tab: sub-tab switcher ───────────────────────────────────────────
+const SOURCING_SUBTABS = [
+  { id:"xray",       label:"AI X-Ray Search",   dot:"#0891b2" },
+  { id:"crustdata",  label:"Crustdata Search",  dot:"#4d64d8" },
+  { id:"github",     label:"GitHub Sourcing",   dot:"#24292f" },
+];
+
+function SourcingTab({ mapData, form }) {
+  const [subTab, setSubTab] = useState("xray");
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"20px",flexWrap:"wrap"}}>
+        {SOURCING_SUBTABS.map(t=>{
+          const isActive = subTab===t.id;
+          return (
+            <button key={t.id} type="button" onClick={()=>setSubTab(t.id)}
+              style={{
+                display:"flex",alignItems:"center",gap:"6px",
+                padding:"6px 14px",
+                fontSize:"12px",fontWeight: isActive ? 600 : 500,
+                cursor:"pointer",
+                borderRadius:"999px",
+                color: isActive ? "#ffffff" : "#6b7280",
+                background: isActive ? t.dot : "#f3f4f6",
+                border: isActive ? `1.5px solid ${t.dot}` : "1.5px solid #e5e7eb",
+                outline:"none",
+                boxShadow: isActive ? `0 2px 8px ${t.dot}66` : "none",
+                transition:"background .15s, color .15s, box-shadow .15s",
+                fontFamily:"Inter,sans-serif",
+                whiteSpace:"nowrap",
+              }}>
+              <div style={{
+                width:"6px",height:"6px",borderRadius:"50%",flexShrink:0,
+                background: isActive ? "rgba(255,255,255,0.8)" : t.dot,
+              }}/>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      {subTab==="xray" ? <XraySearchPanel mapData={mapData} form={form}/>
+        : subTab==="crustdata" ? <CrustdataSearch mapData={mapData} form={form}/>
+        : <GitHubContributorSourcing/>}
     </div>
   );
 }
