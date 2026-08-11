@@ -5,6 +5,7 @@ import sourceHandler from "./api/source.js";
 import intakeHandler from "./api/intake.js";
 import enrichHandler from "./api/enrich.js";
 import clayHandler from "./api/clay.js";
+import githubHandler from "./api/github.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -202,6 +203,7 @@ app.post("/api/source", sourceHandler);
 app.post("/api/intake", intakeHandler);
 app.post("/api/enrich", enrichHandler);
 app.post("/api/clay", clayHandler);
+app.post("/api/github", githubHandler);
 
 // ─── /api/xray — AI-generated boolean search strings ─────────────────────────
 app.post("/api/xray", async (req, res) => {

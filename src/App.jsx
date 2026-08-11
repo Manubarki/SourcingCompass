@@ -1,4 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  resetRateLimitIfTokenChanged, parseNaturalQuery, expandTopQuery, searchRepos,
+  getContributors, enrichContributors, contributorsToCsv, findContributorEmail, downloadCsv,
+} from "./lib/github.js";
 
 // ─── Client-side JSON repair for truncated LLM responses ─────────────────────
 function repairJSON(raw) {
@@ -453,6 +457,451 @@ function CandidateSearch({ mapData, form }) {
   );
 }
 
+// ─── GitHub contributor sourcing ─────────────────────────────────────────────
+// Search GitHub repos related to the role's stack, extract their contributors
+// (real engineers who actually write this code), enrich profiles, bulk-find
+// emails, filter by location, export CSV. Ported from manubarki/repo-extract.
+const GH_PER_PAGE = 10;
+
+function generateGhPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  if (current > 3) pages.push("...");
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+  if (current < total - 2) pages.push("...");
+  pages.push(total);
+  return pages;
+}
+
+function RepoResultCard({ repo, onClick, selected }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div onClick={() => onClick(repo)} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{
+        background: selected ? "#f5f7ff" : "#ffffff", border: `1px solid ${selected ? "#d2d8f8" : "#e5e7eb"}`,
+        borderRadius: "9px", padding: "12px 14px", cursor: "pointer",
+        boxShadow: hov ? "0 4px 14px rgba(0,0,0,0.08)" : "none",
+        borderColor: hov ? "#c7cef2" : (selected ? "#d2d8f8" : "#e5e7eb"),
+        transition: "box-shadow .15s, border-color .15s",
+      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+        <img src={repo.owner.avatar_url} alt={repo.owner.login} style={{ width: "18px", height: "18px", borderRadius: "50%" }} />
+        <span style={{ fontSize: "13px", fontWeight: 600, color: "#111827", fontFamily: "Inter,sans-serif" }}>{repo.full_name}</span>
+      </div>
+      {repo.description && (
+        <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "8px", fontFamily: "Inter,sans-serif", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {repo.description}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: "14px", fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>
+        <span>★ {repo.stargazers_count.toLocaleString()}</span>
+        <span>⑂ {repo.forks_count.toLocaleString()}</span>
+        {repo.language && <span style={{ color: "#0891b2" }}>{repo.language}</span>}
+        <span>Updated {new Date(repo.updated_at).toLocaleDateString()}</span>
+      </div>
+    </div>
+  );
+}
+
+function ContributorRow({ c, token, repoName, onUpdate }) {
+  const [finding, setFinding] = useState(false);
+  async function findEmail() {
+    setFinding(true);
+    try {
+      const email = await findContributorEmail(c.login, token, repoName);
+      onUpdate(c.login, { email: email || "not found" });
+    } catch {
+      onUpdate(c.login, { email: "error" });
+    }
+    setFinding(false);
+  }
+  const blogUrl = c.blog ? (/^https?:\/\//i.test(c.blog.trim()) ? c.blog.trim() : /^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}/.test(c.blog.trim()) ? `https://${c.blog.trim()}` : null) : null;
+  const hasBlogInSocials = c.social_accounts?.some(s => s.url === blogUrl);
+
+  return (
+    <tr style={{ borderTop: "1px solid #f3f4f6" }}>
+      <td style={{ padding: "9px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+          {c.avatar_url ? (
+            <img src={c.avatar_url} alt={c.login} style={{ width: "26px", height: "26px", borderRadius: "50%" }} />
+          ) : (
+            <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "#9ca3af" }}>?</div>
+          )}
+          <div style={{ minWidth: 0 }}>
+            {c.name && <div style={{ fontSize: "12px", fontWeight: 600, color: "#111827", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>{c.name}</div>}
+            <a href={c.html_url} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#4d64d8", fontFamily: "Inter,sans-serif", textDecoration: "none" }}>@{c.login}</a>
+            {c.company && <div style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "160px" }}>{c.company}</div>}
+          </div>
+        </div>
+      </td>
+      <td style={{ padding: "9px 12px", fontSize: "12px", color: "#374151", fontFamily: "Inter,sans-serif" }}>{c.contributions}</td>
+      <td style={{ padding: "9px 12px" }}>
+        {c.email && c.email !== "not found" && c.email !== "error" ? (
+          <a href={`mailto:${c.email}`} style={{ fontSize: "11px", color: "#16a34a", fontFamily: "Inter,sans-serif" }}>{c.email}</a>
+        ) : c.email === "not found" ? (
+          <span style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>not found</span>
+        ) : c.email === "error" ? (
+          <span style={{ fontSize: "11px", color: "#dc2626", fontFamily: "Inter,sans-serif" }}>error</span>
+        ) : finding ? (
+          <div style={{ width: "12px", height: "12px", border: "2px solid #4d64d8", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        ) : (
+          <button type="button" onClick={findEmail} title="Find email from commit patches"
+            style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "5px", border: "1px solid #d2d8f8", background: "#eff2fe", color: "#4d64d8", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+            Find
+          </button>
+        )}
+      </td>
+      <td style={{ padding: "9px 12px", fontSize: "11px", color: "#374151", fontFamily: "Inter,sans-serif", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "120px" }}>
+        {c.location || <span style={{ color: "#d1d5db" }}>—</span>}
+      </td>
+      <td style={{ padding: "9px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {(c.social_accounts || []).map((s, idx) => (
+            <a key={idx} href={s.url} target="_blank" rel="noreferrer" title={s.provider} style={{ fontSize: "11px", color: "#4d64d8", fontFamily: "Inter,sans-serif", textDecoration: "none", textTransform: "capitalize" }}>
+              {s.provider === "twitter" ? "𝕏" : s.provider}
+            </a>
+          ))}
+          {c.twitter_username && !c.social_accounts?.some(s => s.provider === "twitter") && (
+            <a href={`https://twitter.com/${c.twitter_username}`} target="_blank" rel="noreferrer" title="Twitter" style={{ fontSize: "11px", color: "#4d64d8", textDecoration: "none" }}>𝕏</a>
+          )}
+          {blogUrl && !hasBlogInSocials && (
+            <a href={blogUrl} target="_blank" rel="noreferrer" title="Blog/Website" style={{ fontSize: "11px", color: "#4d64d8", textDecoration: "none" }}>🔗</a>
+          )}
+          {!c.twitter_username && !(c.social_accounts?.length) && !blogUrl && <span style={{ fontSize: "11px", color: "#d1d5db" }}>—</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function GitHubContributorSourcing() {
+  const [token, setToken] = useState("");
+  const [showToken, setShowToken] = useState(false);
+
+  const [query, setQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [parsedNotice, setParsedNotice] = useState(null);
+
+  const [repos, setRepos] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentQuery, setCurrentQuery] = useState("");
+  const [currentPerPage, setCurrentPerPage] = useState(GH_PER_PAGE);
+
+  const [selectedRepo, setSelectedRepo] = useState(null);
+  const [contributorCount, setContributorCount] = useState(null);
+
+  const [contributors, setContributors] = useState([]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState(null);
+
+  const [enriching, setEnriching] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState(null);
+  const [enrichPaused, setEnrichPaused] = useState(false);
+  const enrichControlRef = useRef({ paused: false });
+
+  const [locationFilter, setLocationFilter] = useState("");
+  const [bulkFinding, setBulkFinding] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(null);
+
+  async function doSearch(q, page, perPage = currentPerPage, sort = "stars", postProcess) {
+    setSearchLoading(true); setError(null);
+    resetRateLimitIfTokenChanged(token || undefined);
+    try {
+      const result = await searchRepos(q, token || undefined, page, perPage, sort);
+      const items = postProcess ? postProcess(result.items) : result.items;
+      setRepos(items);
+      setTotalCount(result.total_count);
+      setCurrentPage(page);
+      setCurrentQuery(q);
+      setCurrentPerPage(perPage);
+      if (items.length === 0) setError("No repositories found.");
+    } catch (e) { setError(e.message); }
+    setSearchLoading(false);
+  }
+
+  async function handleSearch() {
+    if (!query.trim()) return;
+    const parsed = parseNaturalQuery(query.trim());
+    if (!parsed.isTopQuery) {
+      setParsedNotice(null);
+      return doSearch(parsed.query, 1, parsed.perPage, "stars");
+    }
+    setSearchLoading(true); setError(null);
+    try {
+      const expanded = await expandTopQuery(parsed.subject);
+      const topicLabel = expanded.topics.length ? expanded.topics.join(", ") : parsed.subject;
+      setParsedNotice(`✨ Top ${parsed.perPage} relevant repos for "${parsed.subject}" — semantic match (${topicLabel}), then ranked by stars`);
+      const poolSize = Math.min(parsed.perPage * 4, 50);
+      await doSearch(expanded.query, 1, poolSize, "best-match",
+        items => [...items].sort((a, b) => b.stargazers_count - a.stargazers_count).slice(0, parsed.perPage));
+    } catch (e) {
+      setError(e.message || "Failed to expand query");
+      setSearchLoading(false);
+    }
+  }
+
+  async function selectRepo(repo) {
+    setSelectedRepo(repo);
+    setContributors([]); setExtracting(false); setExtractProgress(null);
+    setEnriching(false); setEnrichProgress(null); setError(null);
+    setContributorCount(null);
+    try {
+      const headers = { Accept: "application/vnd.github+json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/contributors?per_page=1&anon=true`, { headers });
+      const link = res.headers.get("Link");
+      const match = link?.match(/page=(\d+)>;\s*rel="last"/);
+      if (match) setContributorCount(parseInt(match[1], 10));
+      else {
+        const data = await res.json();
+        if (Array.isArray(data)) setContributorCount(data.length);
+      }
+    } catch { /* count is optional */ }
+  }
+
+  async function handleExtract() {
+    if (!selectedRepo) return;
+    setExtracting(true); setContributors([]); setExtractProgress(null); setError(null);
+    try {
+      const result = await getContributors(selectedRepo.owner.login, selectedRepo.name, token || undefined,
+        (current, remaining) => setExtractProgress({ current, remaining }));
+      setContributors(result);
+    } catch (e) { setError(e.message); }
+    setExtracting(false); setExtractProgress(null);
+  }
+
+  async function handleEnrich() {
+    if (enriching || contributors.length === 0) return;
+    setEnriching(true); setEnrichPaused(false);
+    enrichControlRef.current = { paused: false };
+    try {
+      const enrichedList = await enrichContributors(contributors, token || undefined,
+        (current, total, partial) => { setEnrichProgress({ current, total }); if (partial) setContributors(partial); },
+        enrichControlRef.current);
+      setContributors(enrichedList);
+    } catch (e) { setError(e.message); }
+    setEnriching(false); setEnrichProgress(null);
+  }
+
+  function handleTogglePause() {
+    const next = !enrichControlRef.current.paused;
+    enrichControlRef.current.paused = next;
+    setEnrichPaused(next);
+  }
+
+  const handleUpdateContributor = useCallback((login, updates) => {
+    setContributors(prev => prev.map(c => (c.login === login ? { ...c, ...updates } : c)));
+  }, []);
+
+  async function handleFindAllEmails() {
+    const needEmail = contributors.filter(c => !c.email && !c.isAnonymous);
+    if (!needEmail.length) return;
+    setBulkFinding(true); setBulkProgress({ current: 0, total: needEmail.length });
+    for (let i = 0; i < needEmail.length; i++) {
+      const c = needEmail[i];
+      try {
+        const email = await findContributorEmail(c.login, token || undefined, selectedRepo.full_name);
+        handleUpdateContributor(c.login, { email: email || "not found" });
+      } catch {
+        handleUpdateContributor(c.login, { email: "error" });
+      }
+      setBulkProgress({ current: i + 1, total: needEmail.length });
+    }
+    setBulkFinding(false); setBulkProgress(null);
+  }
+
+  function handleExport() {
+    const csv = contributorsToCsv(contributors, selectedRepo.full_name);
+    downloadCsv(csv, `${selectedRepo.full_name.replace("/", "_")}_contributors.csv`);
+  }
+
+  const totalPages = Math.min(Math.ceil(totalCount / currentPerPage), 100);
+  const filteredContributors = locationFilter.trim()
+    ? contributors.filter(c => c.location?.toLowerCase().includes(locationFilter.trim().toLowerCase()))
+    : contributors;
+
+  return (
+    <div style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid #f3f4f6" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#24292f", boxShadow: "0 0 0 3px rgba(36,41,47,0.12)" }} />
+        <span style={{ fontSize: "11px", fontWeight: 600, color: "#374151", textTransform: "uppercase", letterSpacing: "0.1em", fontFamily: "Inter,sans-serif" }}>GitHub Contributor Sourcing</span>
+        <div style={{ flex: 1, height: "1px", background: "#f3f4f6" }} />
+      </div>
+      <p style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
+        Search open-source repos in your target stack, extract real contributors, enrich their profiles, and find emails — people who actually write this code.
+      </p>
+
+      {/* Search row */}
+      <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+        <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()}
+          placeholder='Search repos or try "top 10 repos in cloud infra"'
+          style={{ flex: 1, fontSize: "12px", padding: "9px 12px", borderRadius: "7px", border: "1px solid #e5e7eb", fontFamily: "Inter,sans-serif" }} />
+        <button type="button" onClick={handleSearch} disabled={searchLoading || !query.trim()}
+          style={{ padding: "9px 16px", borderRadius: "7px", fontSize: "12px", fontWeight: 600, border: "none",
+            background: "#24292f", color: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif", opacity: (searchLoading || !query.trim()) ? 0.5 : 1, whiteSpace: "nowrap" }}>
+          {searchLoading ? "Searching…" : "Search"}
+        </button>
+      </div>
+
+      {/* Token input */}
+      <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
+        <input type={showToken ? "text" : "password"} value={token} onChange={e => setToken(e.target.value)}
+          placeholder="GitHub Personal Access Token (optional)" autoComplete="new-password" name="gh_token_nofill" data-1p-ignore data-lpignore="true"
+          style={{ flex: 1, fontSize: "11px", padding: "7px 10px", borderRadius: "6px", border: "1px solid #e5e7eb", fontFamily: "Inter,sans-serif" }} />
+        <button type="button" onClick={() => setShowToken(s => !s)}
+          style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", color: "#6b7280", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+          {showToken ? "Hide" : "Show"}
+        </button>
+      </div>
+      <p style={{ fontSize: "10.5px", color: "#9ca3af", marginBottom: "16px", fontFamily: "Inter,sans-serif" }}>
+        Optional — raises the GitHub rate limit from 60 to 5,000 requests/hour. Stored in memory only, never sent anywhere but api.github.com.
+      </p>
+
+      {parsedNotice && !error && (
+        <div style={{ marginBottom: "12px", padding: "8px 12px", background: "#eff2fe", border: "1px solid #d2d8f8", borderRadius: "7px", fontSize: "11px", color: "#4d64d8", fontFamily: "Inter,sans-serif" }}>
+          {parsedNotice}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginBottom: "12px", padding: "10px 12px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "7px", fontSize: "12px", color: "#dc2626", fontFamily: "Inter,sans-serif" }}>
+          {error}
+        </div>
+      )}
+
+      {/* Repo results */}
+      {repos.length > 0 && (
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+            <span style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>{totalCount.toLocaleString()} repositories — click to select</span>
+            <span style={{ fontSize: "11px", color: "#9ca3af", fontFamily: "Inter,sans-serif" }}>Page {currentPage} of {totalPages}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {repos.map(repo => (
+              <RepoResultCard key={repo.id} repo={repo} selected={selectedRepo?.id === repo.id} onClick={selectRepo} />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "12px", flexWrap: "wrap" }}>
+              <button type="button" disabled={currentPage <= 1 || searchLoading} onClick={() => doSearch(currentQuery, currentPage - 1)}
+                style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif", opacity: currentPage <= 1 ? 0.4 : 1 }}>‹ Prev</button>
+              {generateGhPageNumbers(currentPage, totalPages).map((p, i) => p === "..." ? (
+                <span key={`e${i}`} style={{ fontSize: "11px", color: "#9ca3af", padding: "5px 4px" }}>…</span>
+              ) : (
+                <button key={p} type="button" disabled={searchLoading} onClick={() => doSearch(currentQuery, p)}
+                  style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", cursor: "pointer", fontFamily: "Inter,sans-serif",
+                    border: `1px solid ${p === currentPage ? "#4d64d8" : "#e5e7eb"}`, background: p === currentPage ? "#4d64d8" : "#fff", color: p === currentPage ? "#fff" : "#374151" }}>{p}</button>
+              ))}
+              <button type="button" disabled={currentPage >= totalPages || searchLoading} onClick={() => doSearch(currentQuery, currentPage + 1)}
+                style={{ padding: "5px 10px", fontSize: "11px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif", opacity: currentPage >= totalPages ? 0.4 : 1 }}>Next ›</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Selected repo panel */}
+      {selectedRepo && (
+        <div style={{ background: "#fafbfc", border: "1px solid #e5e7eb", borderRadius: "10px", padding: "16px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px", marginBottom: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+              <img src={selectedRepo.owner.avatar_url} alt="" style={{ width: "24px", height: "24px", borderRadius: "50%" }} />
+              <div style={{ minWidth: 0 }}>
+                <a href={selectedRepo.html_url} target="_blank" rel="noreferrer" style={{ fontSize: "13px", fontWeight: 700, color: "#111827", fontFamily: "Inter,sans-serif", textDecoration: "none" }}>{selectedRepo.full_name} ↗</a>
+                {selectedRepo.description && <div style={{ fontSize: "12px", color: "#6b7280", fontFamily: "Inter,sans-serif", marginTop: "2px" }}>{selectedRepo.description}</div>}
+              </div>
+            </div>
+            <button type="button" onClick={() => setSelectedRepo(null)} title="Deselect"
+              style={{ fontSize: "13px", color: "#9ca3af", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>✕</button>
+          </div>
+
+          {contributors.length === 0 && !extracting ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "20px 0" }}>
+              {contributorCount !== null && (
+                <span style={{ fontSize: "12px", color: "#374151", fontFamily: "Inter,sans-serif" }}>
+                  <strong>{contributorCount.toLocaleString()}</strong> contributors
+                </span>
+              )}
+              <button type="button" onClick={handleExtract}
+                style={{ padding: "9px 18px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, border: "none",
+                  background: "#24292f", color: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                Extract Contributors
+              </button>
+            </div>
+          ) : extracting ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "16px", background: "#f5f7ff", borderRadius: "8px", border: "1px solid #d2d8f8" }}>
+              <div style={{ width: "14px", height: "14px", border: "2px solid #4d64d8", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: "12px", color: "#4d64d8", fontFamily: "Inter,sans-serif" }}>
+                Extracting contributors… {extractProgress ? `(${extractProgress.current} found${extractProgress.remaining != null ? ` · ${extractProgress.remaining} API calls left` : ""})` : ""}
+              </span>
+            </div>
+          ) : (
+            <div>
+              {/* Toolbar */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                <span style={{ fontSize: "12px", color: "#374151", fontFamily: "Inter,sans-serif" }}>
+                  <strong>{filteredContributors.length}{locationFilter ? `/${contributors.length}` : ""}</strong> contributors
+                </span>
+                <input value={locationFilter} onChange={e => setLocationFilter(e.target.value)} placeholder="Filter by location…"
+                  style={{ fontSize: "11px", padding: "6px 10px", borderRadius: "6px", border: "1px solid #e5e7eb", width: "150px", fontFamily: "Inter,sans-serif" }} />
+
+                <div style={{ flex: 1 }} />
+
+                {enriching && enrichProgress ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>
+                    <span>{enrichPaused ? "paused" : "enriching"} {enrichProgress.current}/{enrichProgress.total}</span>
+                    <button type="button" onClick={handleTogglePause}
+                      style={{ fontSize: "10px", fontWeight: 600, padding: "3px 8px", borderRadius: "5px", border: "1px solid #d2d8f8", background: "#eff2fe", color: "#4d64d8", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                      {enrichPaused ? "Resume" : "Pause"}
+                    </button>
+                  </div>
+                ) : !contributors.every(c => c.enriched) ? (
+                  <button type="button" onClick={handleEnrich}
+                    style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", border: "none", background: "#4d64d8", color: "#fff", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                    Enrich Profiles
+                  </button>
+                ) : null}
+
+                {bulkFinding && bulkProgress ? (
+                  <span style={{ fontSize: "11px", color: "#6b7280", fontFamily: "Inter,sans-serif" }}>Finding emails {bulkProgress.current}/{bulkProgress.total}</span>
+                ) : contributors.some(c => !c.email && !c.isAnonymous) ? (
+                  <button type="button" onClick={handleFindAllEmails}
+                    style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", border: "1px solid #16a34a", background: "#f0fdf4", color: "#16a34a", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                    Find All Emails
+                  </button>
+                ) : null}
+
+                <button type="button" onClick={handleExport}
+                  style={{ fontSize: "11px", fontWeight: 600, padding: "7px 12px", borderRadius: "6px", border: "1px solid #e5e7eb", background: "#fff", color: "#374151", cursor: "pointer", fontFamily: "Inter,sans-serif" }}>
+                  Export CSV
+                </button>
+              </div>
+
+              {/* Table */}
+              <div style={{ maxHeight: "420px", overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: "8px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead style={{ position: "sticky", top: 0, background: "#f9fafb" }}>
+                    <tr>
+                      {["User", "Contributions", "Email", "Location", "Socials"].map(h => (
+                        <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: "10px", fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", fontFamily: "Inter,sans-serif" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredContributors.map((c, i) => (
+                      <ContributorRow key={`${c.login}-${i}`} c={c} token={token || undefined} repoName={selectedRepo.full_name} onUpdate={handleUpdateContributor} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Sourcing tab: X-Ray Builder + live candidates ───────────────────────────
 function SourcingTab({ mapData, form }) {
   const [copied, setCopied]   = useState(null);
@@ -594,6 +1043,7 @@ function SourcingTab({ mapData, form }) {
       )}
 
       <CandidateSearch mapData={mapData} form={form}/>
+      <GitHubContributorSourcing/>
     </div>
   );
 }

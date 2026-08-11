@@ -9,7 +9,8 @@
     "api/xray.js":     { "maxDuration": 30 },
     "api/intake.js":   { "maxDuration": 30 },
     "api/enrich.js":   { "maxDuration": 30 },
-    "api/clay.js":     { "maxDuration": 30 }
+    "api/clay.js":     { "maxDuration": 30 },
+    "api/github.js":   { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/api/generate", "destination": "/api/generate" },
@@ -18,6 +19,7 @@
     { "source": "/api/intake",   "destination": "/api/intake"   },
     { "source": "/api/enrich",   "destination": "/api/enrich"   },
     { "source": "/api/clay",     "destination": "/api/clay"     },
+    { "source": "/api/github",   "destination": "/api/github"   },
     { "source": "/(.*)",         "destination": "/index.html"   }
   ]
 }
