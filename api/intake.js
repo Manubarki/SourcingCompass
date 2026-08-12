@@ -33,8 +33,16 @@ Output ONLY valid compact single-line JSON. No markdown. No backticks. No explan
 
 Fill every field using what was actually discussed. If something was never covered, make a reasonable, clearly-labeled inference rather than leaving it blank (e.g. "Not discussed — inferred from role/seniority").
 
+mustHaves is for the human-readable ICP/JD — full qualification bullets are fine there (can include years of experience, degree, soft skills, etc).
+
+searchKeywords is a SEPARATE, much stricter field: it feeds directly into sourcing search queries (boolean X-ray strings, LinkedIn/Crustdata filters), so it must be SHORT and PRECISE, not a restatement of mustHaves. Rules:
+- Maximum 5 keywords. Fewer is better if the role doesn't have 5 distinct discriminating skills.
+- Each keyword is a single technology, tool, language, framework, domain, or functional term a candidate would actually list on a resume or LinkedIn profile — e.g. "Kubernetes", "Go", "distributed systems", "React", "supply chain". 1-3 words max per keyword.
+- NEVER include full sentences, soft skills ("communication", "leadership"), degree/education requirements, years-of-experience phrases, or generic filler ("team player", "self-starter"). Only concrete, searchable, resume-worthy terms.
+- Rank by how discriminating/important each is for finding the right candidates — put the most essential first.
+
 Return exactly this structure:
-{"icp":{"role":"","seniority":"","location":"","teamContext":"1-2 sentences on the team and why the role is open","mustHaves":["skill/qualification",""],"niceToHaves":["",""],"dealbreakers":["",""],"compRange":"e.g. $180k-$220k base + equity","successMetrics":"1-2 sentences on 6-12 month success","cultureNotes":"1-2 sentences","interviewProcess":"1 sentence","summary":"3-4 sentence recruiter-ready ICP summary"},"jobDescription":"full markdown job description: role title as # heading, About the Role, What You'll Do (bullets), What We're Looking For (bullets, must-haves first then nice-to-haves), and a short About the Team section. Use \\n for line breaks."}`;
+{"icp":{"role":"","seniority":"","location":"","teamContext":"1-2 sentences on the team and why the role is open","mustHaves":["skill/qualification",""],"searchKeywords":["kw1","kw2"],"niceToHaves":["",""],"dealbreakers":["",""],"compRange":"e.g. $180k-$220k base + equity","successMetrics":"1-2 sentences on 6-12 month success","cultureNotes":"1-2 sentences","interviewProcess":"1 sentence","summary":"3-4 sentence recruiter-ready ICP summary"},"jobDescription":"full markdown job description: role title as # heading, About the Role, What You'll Do (bullets), What We're Looking For (bullets, must-haves first then nice-to-haves), and a short About the Team section. Use \\n for line breaks."}`;
 
 function formatTranscript(transcript) {
   return (transcript || [])

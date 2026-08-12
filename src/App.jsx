@@ -1743,11 +1743,12 @@ export default function TalentMap() {
       const data=await res.json();
       if(data.error) throw new Error(data.error);
       setIcp(data.icp); setJobDescription(data.jobDescription||"");
+      const keywords = (data.icp?.searchKeywords?.length ? data.icp.searchKeywords : data.icp?.mustHaves) || [];
       setForm(f=>({...f,
         role: data.icp?.role || f.role,
         seniority: data.icp?.seniority || f.seniority,
         location: data.icp?.location || f.location,
-        skills: data.icp?.mustHaves?.length ? data.icp.mustHaves : f.skills,
+        skills: keywords.length ? keywords.slice(0,5) : f.skills,
       }));
       setMode("quick");
     } catch(e){ setIntakeError("Finalize failed: "+e.message); }
