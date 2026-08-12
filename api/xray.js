@@ -52,6 +52,8 @@ For skills, think about what ELSE these people mention on their profiles:
 - Related tech: "Apache Iceberg" → "Delta Lake", "Apache Hudi", "Lakehouse"
 - For non-technical roles: industry terms, methodologies, tools they use
 
+CRITICAL JSON SAFETY: the "query" strings legitimately contain double-quote characters (for exact-phrase matching, e.g. "Senior Engineer" OR "Staff Engineer") — every one of those double quotes MUST be escaped as \\" so the JSON stays valid. Do not use quotes in "label" or "strategy" — rephrase instead.
+
 Return ONLY valid JSON, no markdown:
 {
   "strategy": "2-3 sentence paragraph about who to target",

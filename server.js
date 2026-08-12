@@ -186,7 +186,7 @@ app.post("/api/generate", async (req, res) => {
     const companyList = companies.length > 0
       ? "\n\nREFERENCE COMPANY LIST (tech/data companies) — use as a starting point for Target Companies. You may pick companies from this list OR use other well-known companies that are more relevant to the ROLE above. Adjacent and Wildcards should go beyond this list. IMPORTANT: Describe every company from the perspective of the searched ROLE, not from the company's engineering side. For a VP Sales search, describe sales teams, GTM motions, and revenue signals — NOT engineering infrastructure:\n" + getRelevant(companies, role, skills, industries)
       : "";
-    const SYSTEM_JSON = "You output ONLY valid compact single-line JSON. No newlines inside the JSON. No markdown. No backticks. No explanation before or after. Every string value must be concise (under 120 chars). CRITICAL: All companies, profiles, signals, and titles must be specific to the role and skills requested — never default to engineering examples.";
+    const SYSTEM_JSON = "You output ONLY valid compact single-line JSON. No newlines inside the JSON. No markdown. No backticks. No explanation before or after. Every string value must be concise (under 120 chars). CRITICAL: All companies, profiles, signals, and titles must be specific to the role and skills requested — never default to engineering examples. CRITICAL JSON SAFETY: never put a literal double-quote character (\\\") inside any string value — it breaks the JSON. If you need to quote a term, name, or measurement inline, use single quotes ' instead, or rephrase to avoid quoting entirely.";
     const raw = await callLLM(prompt + companyList, 8192, SYSTEM_JSON);
     const text = repairJSON(raw);
 
@@ -251,6 +251,8 @@ For skills, think about what ELSE these people mention on their profiles:
 - Alternative names: "Apache Iceberg" → also "Iceberg", "open table format"
 - Related tech: "Apache Iceberg" → "Delta Lake", "Apache Hudi", "Lakehouse"
 - For non-technical roles: industry terms, methodologies, tools they use
+
+CRITICAL JSON SAFETY: the "query" strings legitimately contain double-quote characters (for exact-phrase matching, e.g. "Senior Engineer" OR "Staff Engineer") — every one of those double quotes MUST be escaped as \\" so the JSON stays valid. Do not use quotes in "label" or "strategy" — rephrase instead.
 
 Return ONLY valid JSON, no markdown:
 {

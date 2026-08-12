@@ -31,6 +31,8 @@ const FINALIZE_SYSTEM = `You are an expert technical recruiter. You will be give
 
 Output ONLY valid compact single-line JSON. No markdown. No backticks. No explanation before or after.
 
+CRITICAL JSON SAFETY: never put a literal double-quote character (") inside any string value — including inside jobDescription — it breaks the JSON. If you need to quote a term, phrase, or title inline (including markdown headings inside jobDescription), use single quotes ' instead, or rephrase to avoid quoting entirely.
+
 Fill every field using what was actually discussed. If something was never covered, make a reasonable, clearly-labeled inference rather than leaving it blank (e.g. "Not discussed — inferred from role/seniority").
 
 mustHaves is for the human-readable ICP/JD — full qualification bullets are fine there (can include years of experience, degree, soft skills, etc).

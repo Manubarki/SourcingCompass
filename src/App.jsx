@@ -1624,6 +1624,7 @@ function buildPrompt(form, icp) {
   ] : [];
   return [
     "You are a talent intelligence system. Return ONLY compact single-line JSON. No newlines inside JSON. No markdown. No backticks. No explanation.",
+    "CRITICAL JSON SAFETY: never put a literal double-quote character (\") inside any string value — it breaks the JSON. If you need to quote a term, name, or measurement inline, use single quotes ' instead, or rephrase to avoid quoting entirely.",
     "Role: "+form.role+" | Hiring Company: "+form.company+" | Location: "+form.location+" | Seniority: "+form.seniority+" | Skills: "+form.skills.join(", "),
     "Industries: "+(form.industries.join(", ")||"Any")+" | Exclusions: "+(form.exclusions.join(", ")||"None"),
     ...icpContext,
