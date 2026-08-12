@@ -1782,12 +1782,16 @@ export default function TalentMap() {
     setParsing(true); setError("");
     try {
       const res=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({messages:[{role:"user",content:'Extract from JD, return ONLY raw JSON: {"role":"title","seniority":"Senior/Staff/etc","skills":["s1"]} JD: '+txt.slice(0,2000)}]})});
+        body:JSON.stringify({messages:[{role:"user",content:
+          'Extract from this JD, return ONLY raw JSON: {"role":"title","seniority":"Senior/Staff/etc","skills":["kw1","kw2"]}. '+
+          'skills feeds directly into sourcing search queries, so it must be SHORT and PRECISE: at most 5 keywords (fewer if the JD does not have 5 distinct discriminating skills), each a single technology, tool, language, framework, or domain term a candidate would list on a resume (e.g. "Kubernetes", "Go", "distributed systems") — 1-3 words per keyword. '+
+          'NEVER include full requirement sentences, soft skills ("communication", "leadership"), degree/education requirements, or years-of-experience phrases. Rank by importance, most essential first. '+
+          'JD: '+txt.slice(0,2000)}]})});
       const data=await res.json();
       const raw=data.content?.map(b=>b.text||"").join("").trim();
       const clean=repairJSON(raw.replace(/```json|```/g,"").trim());
       const parsed=JSON.parse(clean);
-      setForm(f=>({...f,role:parsed.role||f.role,seniority:parsed.seniority||f.seniority,skills:parsed.skills?.length?parsed.skills:f.skills}));
+      setForm(f=>({...f,role:parsed.role||f.role,seniority:parsed.seniority||f.seniority,skills:parsed.skills?.length?parsed.skills.slice(0,5):f.skills}));
       setShowJD(false);
     } catch(e){setError("JD parse failed: "+e.message);}
     setParsing(false);
