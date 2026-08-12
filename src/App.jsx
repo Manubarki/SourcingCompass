@@ -324,7 +324,15 @@ function Section({ cat, nodes, extra }) {
         <span className="text-xs text-muted-foreground">{nodes.length} results</span>
         {extra}
       </div>
-      <p className="text-xs text-muted-foreground mb-4 ml-4">{s.desc}</p>
+      <p className="text-xs text-muted-foreground mb-2 ml-4">{s.desc}</p>
+      <div style={{display:"flex",alignItems:"flex-start",gap:"8px",margin:"0 0 16px 4px",padding:"8px 12px",background:"#fef3c7",border:"1px solid #fde68a",borderRadius:"8px",maxWidth:"680px"}}>
+        <span style={{fontSize:"13px",lineHeight:1,flexShrink:0}}>⚠️</span>
+        <span style={{fontSize:"11.5px",color:"#92400e",fontFamily:"Inter,sans-serif",lineHeight:1.5}}>
+          {cat==="companies"
+            ? <>Relevance, Talent Density, Poachability, and Likely Profile are <strong>AI estimates from general knowledge</strong> — not pulled from any live data source. Only "✓ Verified" badges and "✓ Confirmed" signals (via "Enrich with Crustdata" above) are backed by real company data — everything else here, verify before acting.</>
+            : <><strong>AI-generated from general knowledge</strong> — not pulled from any live data source or verified against real postings. Cross-check before acting.</>}
+        </span>
+      </div>
       <div className="grid grid-cols-3 gap-3" style={{overflow:"visible"}}>
         {nodes.map(n => cat==="companies"
           ? <CompanyCard key={n.id} node={n}/>
