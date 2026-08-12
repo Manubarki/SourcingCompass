@@ -140,12 +140,27 @@ function scoreColor(value) {
   return              { color:"#dc2626", track:"rgba(220,38,38,0.12)"  };       // red — low
 }
 
-function Bar({ label, value }) {
+// Small hoverable marker used to disclose that a field is an AI estimate,
+// not verified data — contrasts with the real "✓ Verified" / "[Confirmed]"
+// badges elsewhere on the same cards.
+function InfoTip({ text }) {
+  return (
+    <span title={text} style={{
+      display:"inline-flex",alignItems:"center",justifyContent:"center",
+      width:"12px",height:"12px",borderRadius:"50%",background:"#f3f4f6",color:"#9ca3af",
+      fontSize:"9px",fontWeight:700,fontFamily:"Inter,sans-serif",cursor:"help",flexShrink:0,
+    }}>i</span>
+  );
+}
+
+function Bar({ label, value, tip }) {
   const { color, track } = scoreColor(value ?? 0);
   return (
     <div style={{marginTop:"10px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
-        <span style={{fontSize:"13px",color:"#6b7280",fontWeight:500,fontFamily:"Inter,sans-serif"}}>{label}</span>
+        <span style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"13px",color:"#6b7280",fontWeight:500,fontFamily:"Inter,sans-serif"}}>
+          {label}{tip && <InfoTip text={tip}/>}
+        </span>
         <span style={{fontSize:"13px",fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color}}>{value}</span>
       </div>
       <div style={{width:"100%",height:"6px",borderRadius:"999px",background:track}}>
@@ -207,12 +222,15 @@ function CompanyCard({ node }) {
           ))}
         </div>
       )}
-      <Bar label="Relevance" value={node.confidence??0}/>
-      <Bar label="Talent Density" value={node.talentDensity??0}/>
-      <Bar label="Poachability" value={node.poachability??0}/>
+      <Bar label="Relevance" value={node.confidence??0} tip="AI-estimated skill/role match — not verified data."/>
+      <Bar label="Talent Density" value={node.talentDensity??0} tip="AI-estimated concentration of relevant talent at this company — not verified data."/>
+      <Bar label="Poachability" value={node.poachability??0} tip="AI-estimated recruitability, informed by the signals below — not verified data."/>
       {node.likelyProfile && (
         <div style={{marginTop:"12px",paddingTop:"12px",borderTop:"1px solid #f3f4f6"}}>
-          <div style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"4px",fontFamily:"Inter,sans-serif"}}>Likely Profile</div>
+          <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"4px"}}>
+            <span style={{fontSize:"10px",color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",fontFamily:"Inter,sans-serif"}}>Likely Profile</span>
+            <InfoTip text="AI-estimated from the role, skills, and company profile — not verified data."/>
+          </div>
           <div style={{fontSize:"12px",color:"#6b7280",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>{node.likelyProfile}</div>
         </div>
       )}
@@ -260,6 +278,7 @@ function CompanyCard({ node }) {
           }}>
             <div style={{fontSize:"10px",color:"#4d64d8",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:"6px",fontFamily:"Inter,sans-serif"}}>Why relevant</div>
             <div style={{fontSize:"12px",color:"#374151",lineHeight:1.5,fontFamily:"Inter,sans-serif"}}>{node.whyRelevant}</div>
+            <div style={{fontSize:"10px",color:"#9ca3af",marginTop:"6px",fontStyle:"italic",fontFamily:"Inter,sans-serif"}}>AI-estimated — not verified data</div>
           </div>
         </div>
       )}
@@ -287,7 +306,7 @@ function SimpleCard({ node, cat }) {
         </div>
       )}
       {cat==="titles" && node.confidence != null && (
-        <Bar label="Confidence" value={node.confidence}/>
+        <Bar label="Confidence" value={node.confidence} tip="AI-estimated match to real postings for this role — not verified data."/>
       )}
     </div>
   );
